@@ -18,7 +18,7 @@ import urllib.parse
 import urllib.request
 
 from stack import Stack, read_env, run
-from bundle import digest, inspect_image, verify_bundle
+from bundle import digest, image_matches, inspect_image, verify_bundle
 
 
 def ci_passed(response, sha, repository):
@@ -113,7 +113,7 @@ class Production:
         run(['docker', 'image', 'load', '-i', bundle / 'images.tar.gz'])
         for info in manifest['images'].values():
             actual = inspect_image(info['tag'])
-            if actual['Id'] != info['id'] or (actual['Os'], actual['Architecture']) != ('linux', 'arm64'):
+            if not image_matches(actual, info):
                 raise ValueError('Loaded image differs from verified ARM64 bundle')
         web = inspect_image(f'gym-web:{sha}')
         if web.get('Config', {}).get('Labels', {}).get('org.opencontainers.image.revision') != sha:
