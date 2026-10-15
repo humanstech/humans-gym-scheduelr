@@ -2,6 +2,7 @@
 """Build an ARM64 bundle outside production. Only main is eligible for deployment."""
 import argparse
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -27,6 +28,51 @@ def inspect_image(tag):
     return json.loads(run(['docker', 'image', 'inspect', tag], capture_output=True, text=True).stdout)[0]
 
 
+class ImageMetadata:
+    """Read small JSON metadata in one streaming pass, skipping filesystem layers."""
+    def __init__(self, path):
+        self.files = {}
+        total = 0
+        with tarfile.open(path, 'r|gz') as archive:
+            for member in archive:
+                if member.isfile() and member.size <= 4 * 1024**2:
+                    content = archive.extractfile(member).read()
+                    if content.lstrip().startswith((b'{', b'[')):
+                        total += len(content)
+                        if total > 32 * 1024**2:
+                            raise ValueError('Excessive image archive metadata')
+                        self.files[member.name] = content
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def extractfile(self, name):
+        return io.BytesIO(self.files[name])
+
+    def getnames(self):
+        return self.files.keys()
+
+
+def image_matches(actual, expected):
+    # Classic Docker reports the config digest; containerd reports the OCI manifest.
+    identities = {expected['id']}
+    if expected.get('manifest_id'):
+        identities.add(expected['manifest_id'])
+    return actual.get('Id') in identities and (actual.get('Os'), actual.get('Architecture')) == ('linux', 'arm64')
+
+
+def archive_config_ids(archive):
+    result = {}
+    for entry in json.load(archive.extractfile('manifest.json')):
+        config = archive.extractfile(entry['Config']).read()
+        for tag in entry.get('RepoTags', []):
+            result[tag.removeprefix('docker.io/library/')] = 'sha256:' + hashlib.sha256(config).hexdigest()
+    return result
+
+
 def verify_bundle(path, sha, source_hash, public_url, anon_key, expected_branch='main'):
     path = Path(path)
     if not re.fullmatch(r'[a-f0-9]{40}', sha):
@@ -49,14 +95,15 @@ def verify_bundle(path, sha, source_hash, public_url, anon_key, expected_branch=
     if set(manifest.get('images', {})) != SERVICES:
         raise ValueError('Bundle must contain exactly the Gym runtime images')
     for service, info in manifest['images'].items():
+        info.pop('manifest_id', None)  # derive this from the checked archive, never trust JSON input
         if info.get('tag') != f'gym-{service}:{sha}' or not re.fullmatch(r'sha256:[a-f0-9]{64}', info.get('id', '')):
             raise ValueError('Invalid Gym image identity')
         if not isinstance(info.get('size'), int) or info['size'] <= 0:
             raise ValueError('Invalid image size')
     # Reject archives that would introduce tags outside this project's namespace.
-    with tarfile.open(path / 'images.tar.gz', 'r:gz') as archive:
+    with ImageMetadata(path / 'images.tar.gz') as archive:
         entries = json.load(archive.extractfile('manifest.json'))
-        actual_tags = {tag for entry in entries for tag in entry.get('RepoTags', [])}
+        actual_tags = {tag.removeprefix('docker.io/library/') for entry in entries for tag in entry.get('RepoTags', [])}
         if actual_tags != {info['tag'] for info in manifest['images'].values()}:
             raise ValueError('Archive contains unexpected image tags')
         configs = {entry['Config']: entry for entry in entries}
@@ -67,9 +114,29 @@ def verify_bundle(path, sha, source_hash, public_url, anon_key, expected_branch=
             if data.get('architecture') != 'arm64' or data.get('os') != 'linux':
                 raise ValueError('Non-ARM64 image in archive')
             for tag in entry['RepoTags']:
+                tag = tag.removeprefix('docker.io/library/')
                 expected = next(info['id'] for info in manifest['images'].values() if info['tag'] == tag)
                 if 'sha256:' + hashlib.sha256(config_bytes).hexdigest() != expected:
                     raise ValueError('Image configuration digest mismatch')
+        if 'index.json' in archive.getnames():
+            by_tag = {info['tag']: info for info in manifest['images'].values()}
+            found = set()
+            for descriptor in json.load(archive.extractfile('index.json')).get('manifests', []):
+                tag = descriptor.get('annotations', {}).get('io.containerd.image.name', '').removeprefix('docker.io/library/')
+                if tag not in by_tag or tag in found:
+                    raise ValueError('Unexpected OCI image tag')
+                found.add(tag)
+                identity = descriptor.get('digest', '')
+                if not re.fullmatch(r'sha256:[a-f0-9]{64}', identity):
+                    raise ValueError('Invalid OCI manifest digest')
+                content = archive.extractfile('blobs/sha256/' + identity.split(':')[1]).read()
+                if 'sha256:' + hashlib.sha256(content).hexdigest() != identity:
+                    raise ValueError('OCI manifest digest mismatch')
+                if json.loads(content).get('config', {}).get('digest') != by_tag[tag]['id']:
+                    raise ValueError('OCI manifest references a different image configuration')
+                by_tag[tag]['manifest_id'] = identity
+            if found != set(by_tag):
+                raise ValueError('OCI index is missing runtime images')
     return manifest
 
 
@@ -138,6 +205,10 @@ def build(args):
                 save.stdout.close()
             if save.wait() != 0:
                 raise RuntimeError('docker save failed')
+        with ImageMetadata(bundle / 'images.tar.gz') as archive:
+            config_ids = archive_config_ids(archive)
+        for info in manifest['images'].values():
+            info['id'] = config_ids[info['tag']]
         manifest['files'] = {name: digest(bundle / name) for name in ['source.tar', 'images.tar.gz']}
         (bundle / 'bundle.json').write_text(json.dumps(manifest, indent=2) + '\n')
         verify_bundle(bundle, sha, manifest['files']['source.tar'], url, key, expected_branch=manifest['branch'])

@@ -8,7 +8,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from bundle import SERVICES, digest, verify_bundle
+from bundle import SERVICES, digest, image_matches, verify_bundle
 
 
 class BundleIntegrityTests(unittest.TestCase):
@@ -25,15 +25,21 @@ class BundleIntegrityTests(unittest.TestCase):
                          'images': {}, 'files': {}}
         self.archive()
 
-    def archive(self, architecture='arm64', foreign_tag=False):
+    def archive(self, architecture='arm64', foreign_tag=False, oci=False, wrong_config=False):
         config = json.dumps({'architecture': architecture, 'os': 'linux'}).encode()
         image_id = hashlib.sha256(config).hexdigest()
         tags = [f'gym-{service}:{self.sha}' for service in sorted(SERVICES)]
         for service in SERVICES:
             self.manifest['images'][service] = {'tag': f'gym-{service}:{self.sha}', 'id': 'sha256:' + image_id, 'size': 1000}
         entry = {'Config': 'config.json', 'RepoTags': tags + (['other-project:latest'] if foreign_tag else []), 'Layers': []}
+        files = [('config.json', config), ('manifest.json', json.dumps([entry]).encode())]
+        if oci:
+            content = json.dumps({'config': {'digest': 'sha256:' + ('0' * 64 if wrong_config else image_id)}}).encode()
+            oci_id = hashlib.sha256(content).hexdigest()
+            index = {'manifests': [{'digest': 'sha256:' + oci_id, 'annotations': {'io.containerd.image.name': 'docker.io/library/' + tag}} for tag in tags]}
+            files += [('index.json', json.dumps(index).encode()), ('blobs/sha256/' + oci_id, content)]
         with tarfile.open(self.root / 'images.tar.gz', 'w:gz') as archive:
-            for name, data in [('config.json', config), ('manifest.json', json.dumps([entry]).encode())]:
+            for name, data in files:
                 info = tarfile.TarInfo(name)
                 info.size = len(data)
                 archive.addfile(info, io.BytesIO(data))
@@ -49,6 +55,26 @@ class BundleIntegrityTests(unittest.TestCase):
 
     def test_accepts_complete_arm_bundle(self):
         self.assertEqual(self.verify()['sha'], self.sha)
+
+    def test_derives_containerd_identity_from_checked_oci_content(self):
+        self.archive(oci=True)
+        self.assertTrue(all(info.get('manifest_id', '').startswith('sha256:') for info in self.verify()['images'].values()))
+        self.archive(oci=True, wrong_config=True)
+        with self.assertRaisesRegex(ValueError, 'different image configuration'):
+            self.verify()
+
+    def test_classic_and_containerd_image_identity(self):
+        expected = {'id': 'sha256:config', 'manifest_id': 'sha256:manifest'}
+        for identity in ['sha256:config', 'sha256:manifest']:
+            self.assertTrue(image_matches({'Id': identity, 'Os': 'linux', 'Architecture': 'arm64'}, expected))
+        self.assertFalse(image_matches({'Id': 'sha256:other', 'Os': 'linux', 'Architecture': 'arm64'}, expected))
+        self.assertFalse(image_matches({'Id': 'sha256:manifest', 'Os': 'linux', 'Architecture': 'amd64'}, expected))
+
+    def test_does_not_trust_manifest_id_supplied_in_bundle_json(self):
+        for info in self.manifest['images'].values():
+            info['manifest_id'] = 'sha256:unchecked'
+        self.write()
+        self.assertTrue(all('manifest_id' not in info for info in self.verify()['images'].values()))
 
     def test_rejects_corruption_and_wrong_source(self):
         with self.assertRaisesRegex(ValueError, 'source differs'):
