@@ -20,6 +20,7 @@ export interface SpaceTimeSlot {
   start_time: string
   end_time: string
   day_of_week: number
+  is_pt: boolean
 }
 
 export function useSpaces() {
@@ -59,7 +60,7 @@ export function useSpaceTimeSlots(spaceId: string) {
     queryFn: async (): Promise<SpaceTimeSlot[]> => {
       const { data, error } = await supabase
         .from('space_time_slots')
-        .select('id, space_id, start_time, end_time, day_of_week')
+        .select('id, space_id, start_time, end_time, day_of_week, is_pt')
         .eq('space_id', spaceId)
         .order('day_of_week')
         .order('start_time')
@@ -128,7 +129,7 @@ export function useCopyDaySlots() {
       targetDay,
     }: {
       spaceId: string
-      slots: { start_time: string; end_time: string }[]
+      slots: { start_time: string; end_time: string; is_pt: boolean }[]
       targetDay: number
     }) => {
       const rows = slots.map(s => ({
@@ -136,10 +137,24 @@ export function useCopyDaySlots() {
         start_time: s.start_time,
         end_time: s.end_time,
         day_of_week: targetDay,
+        is_pt: s.is_pt,
       }))
       const { error } = await supabase
         .from('space_time_slots')
         .upsert(rows, { onConflict: 'space_id,day_of_week,start_time,end_time', ignoreDuplicates: true })
+      if (error) throw error
+    },
+    onSuccess: (_data, { spaceId }) => {
+      queryClient.invalidateQueries({ queryKey: ['space_time_slots', spaceId] })
+    },
+  })
+}
+
+export function useToggleTimeSlotPt() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, isPt }: { id: string; spaceId: string; isPt: boolean }) => {
+      const { error } = await supabase.from('space_time_slots').update({ is_pt: isPt }).eq('id', id)
       if (error) throw error
     },
     onSuccess: (_data, { spaceId }) => {

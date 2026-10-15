@@ -1,6 +1,6 @@
 import { type ReactNode, useMemo } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Calendar, LayoutDashboard, ShieldCheck, LogOut } from 'lucide-react'
+import { Calendar, Dumbbell, LayoutDashboard, ShieldCheck, LogOut, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -12,6 +12,9 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useAuth } from '@/hooks/useAuth'
 import { useIsAdmin } from '@/hooks/useIsAdmin'
+import { useTrainerMode } from '@/hooks/useRoles'
+import { isLowBalance, usePtStatus } from '@/hooks/usePersonalTrainer'
+import { formatEUR } from '@/lib/money'
 import { LegalLinks } from '@/components/LegalLinks'
 import { cn } from '@/lib/utils'
 
@@ -22,13 +25,20 @@ interface LayoutProps {
 export function Layout({ children }: LayoutProps) {
   const { user, signOut } = useAuth()
   const { data: isAdmin } = useIsAdmin(user?.email)
+  const { isTrainerOnly } = useTrainerMode()
+  const { data: ptStatus } = usePtStatus()
   const location = useLocation()
 
-  const navLinks = useMemo(() => [
-    { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-    { to: '/my-bookings', label: 'Le mie prenotazioni', icon: Calendar },
-    ...(isAdmin ? [{ to: '/admin', label: 'Admin', icon: ShieldCheck }] : []),
-  ], [isAdmin])
+  const showWallet = !isTrainerOnly && !!ptStatus && (ptStatus.is_member || ptStatus.ever_member)
+
+  const navLinks = useMemo(() => isTrainerOnly
+    ? [{ to: '/', label: 'Sedute', icon: Dumbbell }]
+    : [
+        { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+        { to: '/my-bookings', label: 'Le mie prenotazioni', icon: Calendar },
+        ...(showWallet ? [{ to: '/wallet', label: 'Wallet', icon: Wallet }] : []),
+        ...(isAdmin ? [{ to: '/admin', label: 'Admin', icon: ShieldCheck }] : []),
+      ], [isAdmin, isTrainerOnly, showWallet])
 
   const navigate = useNavigate()
   const initials = user?.user_metadata?.full_name
@@ -70,45 +80,59 @@ export function Layout({ children }: LayoutProps) {
             </nav>
           </div>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger className="relative h-9 w-9 rounded-full p-0 border-0 bg-transparent cursor-pointer">
-              <Avatar className="h-9 w-9">
-                <AvatarImage
-                  src={user?.user_metadata?.avatar_url as string | undefined}
-                  alt={user?.user_metadata?.full_name as string | undefined}
-                  referrerPolicy="no-referrer"
-                />
-                <AvatarFallback>{initials}</AvatarFallback>
-              </Avatar>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <div className="px-2 py-1.5">
-                <p className="text-sm font-medium leading-none">
-                  {(user?.user_metadata?.full_name as string) ?? 'Utente'}
-                </p>
-                <p className="mt-1 text-xs leading-none text-muted-foreground">
-                  {user?.email}
-                </p>
-              </div>
-              <DropdownMenuSeparator />
-              <div className="flex flex-col gap-0.5 sm:hidden">
-                {navLinks.map(({ to, label, icon: Icon }) => (
-                  <DropdownMenuItem key={to} onClick={() => navigate(to)}>
-                    <Icon className="h-4 w-4" />
-                    {label}
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuSeparator />
-              </div>
-              <DropdownMenuItem
-                onClick={signOut}
-                className="cursor-pointer text-destructive focus:text-destructive"
+          <div className="flex items-center gap-2">
+            {showWallet && ptStatus && (
+              <Link
+                to="/wallet"
+                aria-label={`Saldo wallet ${formatEUR(ptStatus.balance_cents)}`}
+                className={cn(
+                  'rounded-full border px-2.5 py-1 text-xs font-semibold tabular-nums transition-colors hover:bg-muted',
+                  isLowBalance(ptStatus) && 'border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/15'
+                )}
               >
-                <LogOut className="mr-2 h-4 w-4" />
-                Esci
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                {formatEUR(ptStatus.balance_cents)}
+              </Link>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger className="relative h-9 w-9 rounded-full p-0 border-0 bg-transparent cursor-pointer">
+                <Avatar className="h-9 w-9">
+                  <AvatarImage
+                    src={user?.user_metadata?.avatar_url as string | undefined}
+                    alt={user?.user_metadata?.full_name as string | undefined}
+                    referrerPolicy="no-referrer"
+                  />
+                  <AvatarFallback>{initials}</AvatarFallback>
+                </Avatar>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <div className="px-2 py-1.5">
+                  <p className="text-sm font-medium leading-none">
+                    {(user?.user_metadata?.full_name as string) ?? 'Utente'}
+                  </p>
+                  <p className="mt-1 text-xs leading-none text-muted-foreground">
+                    {user?.email}
+                  </p>
+                </div>
+                <DropdownMenuSeparator />
+                <div className="flex flex-col gap-0.5 sm:hidden">
+                  {navLinks.map(({ to, label, icon: Icon }) => (
+                    <DropdownMenuItem key={to} onClick={() => navigate(to)}>
+                      <Icon className="h-4 w-4" />
+                      {label}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                </div>
+                <DropdownMenuItem
+                  onClick={signOut}
+                  className="cursor-pointer text-destructive focus:text-destructive"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Esci
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </header>
 

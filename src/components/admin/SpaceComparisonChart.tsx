@@ -53,7 +53,7 @@ export function SpaceComparisonChart({ bookings, spaces }: SpaceComparisonChartP
           }}
         />
         <Legend wrapperStyle={{ fontSize: 12 }} />
-        <Bar dataKey="prenotazioni" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="prenotazioni" fill="var(--primary)" radius={[4, 4, 0, 0]} />
         <Bar dataKey="utenti" fill="#22c55e" radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>

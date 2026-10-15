@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { format } from 'date-fns'
+import { ptStatusOf } from '@/hooks/useSlots'
 
 export interface Booking {
   id: string
@@ -15,7 +16,13 @@ export interface Booking {
     start_time: string
     end_time: string
     spaces: { name: string } | null
+    pt_sessions: { status: 'active' | 'voided' } | { status: 'active' | 'voided' }[] | null
   } | null
+}
+
+/** True when the booking is on an active personal-trainer session. */
+export function isPtBooking(booking: Booking) {
+  return ptStatusOf(booking.slots?.pt_sessions) === 'active'
 }
 
 export function useMyBookings() {
@@ -28,7 +35,7 @@ export function useMyBookings() {
 
       const { data, error } = await supabase
         .from('bookings')
-        .select('*, slots(date, start_time, end_time, spaces(name))')
+        .select('*, slots(date, start_time, end_time, spaces(name), pt_sessions(status))')
         .eq('user_id', user.id)
         .gte('slots.date', today)
 
@@ -79,6 +86,7 @@ export function useCreateBooking() {
       queryClient.invalidateQueries({ queryKey: ['myBookings'] })
       queryClient.invalidateQueries({ queryKey: ['userBookingsForDate'] })
       queryClient.invalidateQueries({ queryKey: ['adminBookings'] })
+      queryClient.invalidateQueries({ queryKey: ['pt'] })
     },
   })
 }
@@ -96,6 +104,7 @@ export function useDeleteBooking() {
       queryClient.invalidateQueries({ queryKey: ['myBookings'] })
       queryClient.invalidateQueries({ queryKey: ['userBookingsForDate'] })
       queryClient.invalidateQueries({ queryKey: ['adminBookings'] })
+      queryClient.invalidateQueries({ queryKey: ['pt'] })
     },
   })
 }
