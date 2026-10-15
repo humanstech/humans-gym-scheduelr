@@ -16,7 +16,7 @@ Il comando genera `.env.stack.local` se manca, avvia il backend, applica le
 migrazioni una sola volta, inserisce il seed e costruisce il frontend.
 
 - App compilata: http://localhost:8080
-- API: http://localhost:8000
+- API: http://localhost:8080
 - Email locali (Mailpit): http://localhost:8025
 
 In locale Google è disabilitato. Per accedere, aprire **Sei un ospite?**, inserire
@@ -38,7 +38,7 @@ Fermare il vecchio stack prima di avviare il nuovo, per liberare le porte.
 ## Sviluppo con Vite
 
 Copiare `.env.example` in `.env.local` e impostare `VITE_SUPABASE_URL` a
-`http://localhost:8000`. Copiare **solo** il valore `ANON_KEY` da `.env.stack.local`
+`http://localhost:8080`. Copiare **solo** il valore `ANON_KEY` da `.env.stack.local`
 in `VITE_SUPABASE_ANON_KEY`. Non usare `SERVICE_ROLE_KEY`.
 
 ```bash

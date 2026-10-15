@@ -5,8 +5,8 @@ if [[ $(id -u) != 0 ]]; then
   echo 'Run with sudo on the EC2 host.' >&2
   exit 1
 fi
-install -d -m 700 /etc/gym /opt/gym/tools /opt/gym/backups
-install -m 644 scripts/production.py scripts/stack.py /opt/gym/tools/
+install -d -m 700 /opt/gym /opt/gym/tools /opt/gym/backups /opt/gym/logs /opt/gym/incoming /opt/gym/releases
+install -m 644 scripts/production.py scripts/stack.py scripts/bundle.py /opt/gym/tools/
 install -m 644 deploy/systemd/gym-* /etc/systemd/system/
 systemctl daemon-reload
-echo 'Services installed but not enabled. Complete production.env and bootstrap before enabling timers.'
+echo 'Services installed but not enabled. Complete /opt/gym/.env and bootstrap before enabling timers.'

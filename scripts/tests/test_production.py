@@ -56,7 +56,7 @@ class DeploymentFailureTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         env = make_env.generate()
         env.update(SMTP_HOST='smtp.test', SMTP_USER='user', SMTP_PASS='pass',
-                   GOOGLE_CLIENT_ID='client', GOOGLE_CLIENT_SECRET='secret', BACKUP_S3_URI='s3://test/gym')
+                   GOOGLE_CLIENT_ID='client', GOOGLE_CLIENT_SECRET='secret', BACKUP_BEFORE_DEPLOY='false')
         path = self.root / 'production.env'
         path.write_text('\n'.join(f'{k}={v}' for k, v in env.items()))
         self.production = Production(self.root, path)
@@ -65,11 +65,13 @@ class DeploymentFailureTests(unittest.TestCase):
         self.sha = 'a' * 40
         self.release = self.root / 'releases' / self.sha
         (self.release / 'scripts').mkdir(parents=True)
-        for name in ['production.py', 'stack.py']:
+        for name in ['production.py', 'stack.py', 'bundle.py']:
             (self.release / 'scripts' / name).write_text('# fixture\n')
         self.production.main_sha = MagicMock(return_value=self.sha)
         self.production.approved = MagicMock(return_value=True)
-        self.production.extract = MagicMock(return_value=self.release)
+        self.production.prepare_bundle = MagicMock(return_value=(self.root / 'bundle', {}))
+        self.production.load_bundle = MagicMock(return_value=self.release)
+        self.production.preflight = MagicMock()
         self.production.health = MagicMock()
 
     @patch('production.Stack')
@@ -79,8 +81,24 @@ class DeploymentFailureTests(unittest.TestCase):
         stack.assert_not_called()
 
     @patch('production.Stack')
+    def test_missing_bundle_does_not_touch_stack(self, stack):
+        self.production.prepare_bundle.return_value = None
+        self.production.deploy()
+        stack.assert_not_called()
+        self.production.load_bundle.assert_not_called()
+
+    @patch('production.Stack')
+    def test_invalid_bundle_does_not_touch_stack(self, stack):
+        self.production.prepare_bundle.side_effect = ValueError('checksum mismatch')
+        with self.assertRaises(ValueError):
+            self.production.deploy()
+        stack.assert_not_called()
+        self.production.load_bundle.assert_not_called()
+
+    @patch('production.Stack')
     def test_backup_failure_prevents_migrations(self, stack):
-        stack.return_value.backup.side_effect = RuntimeError('S3 unavailable')
+        self.production.env['BACKUP_BEFORE_DEPLOY'] = 'true'
+        stack.return_value.backup.side_effect = RuntimeError('Backup unavailable')
         with self.assertRaises(RuntimeError):
             self.production.deploy()
         stack.return_value.migrate.assert_not_called()
@@ -90,7 +108,7 @@ class DeploymentFailureTests(unittest.TestCase):
         stack.assert_not_called()
 
     @patch('production.Stack')
-    def test_main_advance_during_build_skips_release(self, stack):
+    def test_main_advance_during_import_skips_release(self, stack):
         self.production.main_sha.side_effect = [self.sha, 'c' * 40]
         self.production.deploy()
         stack.return_value.backup.assert_not_called()
@@ -103,7 +121,7 @@ class DeploymentFailureTests(unittest.TestCase):
         self.production.health.side_effect = [RuntimeError('HTTP unhealthy'), None]
         with self.assertRaises(RuntimeError):
             self.production.deploy()
-        old.compose.assert_called_once_with('up', '-d', '--wait', '--wait-timeout', '300')
+        old.compose.assert_called_once_with('up', '-d', '--no-build', '--pull', 'never', '--wait', '--wait-timeout', '300')
         self.assertEqual(json.loads(self.production.state.read_text()), self.previous)
 
     @patch('production.Stack')
@@ -111,6 +129,7 @@ class DeploymentFailureTests(unittest.TestCase):
         self.production.deploy()
         self.assertEqual(json.loads(self.production.state.read_text())['sha'], self.sha)
         stack.return_value.seed.assert_not_called()
+        stack.return_value.backup.assert_not_called()
         self.assertFalse(self.production.failed.exists())
 
 

@@ -22,12 +22,13 @@ python3 -m unittest discover -s scripts/tests -v
 ```
 
 La CI esegue un solo job Linux su push a `develop` e `main`, con cache npm e
-cancellazione delle esecuzioni superate. Non esegue Playwright né pubblica
-immagini/artifact ad ogni push. Il deploy è un servizio systemd su EC2 che
-controlla `main` ogni due minuti, verifica la CI per lo stesso SHA e costruisce
-l'immagine sulla macchina. Nessuna credenziale AWS viene salvata su GitHub.
+cancellazione delle esecuzioni superate. Le immagini ARM64 vengono costruite
+fuori dalla produzione e trasferite in un bundle verificato. Il timer EC2
+controlla `main`, la sua CI e la presenza del bundle completo prima del deploy.
+Nessuna compilazione sul server condiviso e nessuna chiave SSH su GitHub.
 
-Il repository è pubblico: i runner GitHub standard sono gratuiti secondo la
-[documentazione GitHub](https://docs.github.com/en/actions/concepts/billing-and-usage).
-L'architettura riduce comunque il tempo dei job e continua a funzionare se il
-repository diventa privato, configurando allora l'accesso in lettura da EC2.
+Gym usa un solo ingresso `127.0.0.1:18200`; l’edge condiviso gestisce HTTPS.
+App e API condividono `https://gym.humans.tech`. I backup automatici sono
+**disabilitati per scelta del proprietario**; resta il comando manuale.
+
+Per completare login ed email: [docs/CREDENTIALS.md](docs/CREDENTIALS.md).

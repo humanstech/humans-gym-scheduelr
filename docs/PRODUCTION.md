@@ -1,295 +1,206 @@
-# Produzione su EC2
+# Gym sulla macchina condivisa
 
-Destinazione: **https://gym.humans.tech**, API **https://gym-api.humans.tech**.
-Primo amministratore: **marco.ciotoli@humans.tech**. Installazione su database
-vuoto; nessun dato viene importato dal vecchio Supabase.
+Destinazione confermata: **https://gym.humans.tech**, EC2 ARM64
+**63.178.93.191**, ingresso assegnato **127.0.0.1:18200 → 8080**.
+Frontend e API usano lo stesso dominio. Il callback Google è
+`https://gym.humans.tech/auth/v1/callback`. Mittente: `gym@services.humans.tech`.
 
-## 1. Branch e CI/CD
+## Architettura e limiti
 
-Il lavoro si pusha su `develop`. Per rilasciare si apre una PR `develop → main`.
-La produzione segue solo `main`; non si fa mai deploy da `develop`.
+L’edge condiviso termina TLS. Gym non pubblica 80/443, non emette certificati,
+non usa reti di altri progetti e non risponde sull’IP pubblico senza il dominio.
+Il suo Caddy HTTP instrada `/auth/v1/*`, `/rest/v1/*` e `/realtime/v1/*` al gateway
+privato; serve la SPA sulle altre rotte e `/healthz` per il controllo pubblico.
 
-```bash
-git switch develop
-git pull --ff-only origin develop
-# modifiche e controlli locali
-git add <file>
-git commit -m "Descrizione della modifica"
-git push origin develop
-gh pr create --base main --head develop
-```
+I proxy accettano gli header di inoltro soltanto da reti private/loopback.
+Il sito edge sostituisce X-Forwarded-For con l’IP del peer e imposta HTTPS;
+il proxy Gym ricostruisce l’IP inoltrato e rimuove l’header Forwarded alternativo.
+Configurazione basata sulle [opzioni Caddy](https://caddyserver.com/docs/caddyfile/options).
 
-La CI è `.github/workflows/ci.yml`: un solo job `verify`, runner Linux standard,
-cache npm, timeout 10 minuti, esecuzioni obsolete cancellate. Parte sui push
-ai due branch e manualmente. Non parte anche sulle PR, evitando la doppia
-esecuzione per lo stesso push a `develop`. Il commit di merge su `main` viene
-verificato di nuovo. I test browser completi si eseguono in locale prima di
-promuovere modifiche a UI, Auth o database.
+Ogni servizio ha piattaforma `linux/arm64`, healthcheck, restart unless-stopped,
+log JSON limitati a 3 × 10 MB e limite RAM:
 
-Configurare la protezione di `main` in GitHub:
-
-- richiedere una PR e il controllo `verify`;
-- richiedere che il branch sia aggiornato rispetto a `main`;
-- bloccare force push e cancellazione;
-- applicare le regole anche agli amministratori;
-- usare **merge commit** e non eliminare `develop` dopo il merge.
-
-Dopo il merge riallineare lo sviluppo:
-
-```bash
-git switch develop
-git fetch origin
-git merge --ff-only origin/main
-git push origin develop
-```
-
-Il deploy su EC2 è un timer, non un runner GitHub: ogni due minuti legge `main`,
-controlla la riuscita del workflow CI per **quello stesso SHA**, costruisce
-l'immagine, salva un backup, applica le migrazioni e verifica il servizio pubblico.
-Non richiede porte aperte per webhook, SSH da GitHub o credenziali AWS su GitHub.
-
-Se `main` ha una CI in corso o fallita, resta online l'ultima release valida di
-`main`. Un commit che fallisce il deploy non viene ritentato continuamente:
-correggere `main` oppure eseguire `retry` dopo aver risolto la causa. Non viene
-accettato uno SHA arbitrario o un branch diverso per un rilascio.
-
-Il repository è pubblico e i runner standard sono gratuiti. Il deploy non usa
-minuti GitHub. Il primo download Docker su EC2 è più lento dei successivi, che
-riutilizzano la cache. Il polling senza token usa l'API pubblica soltanto quando
-cambia lo SHA; un token in sola lettura è facoltativo per aumentare i limiti API.
-Se il repository diventa privato, configurare anche l'autenticazione Git in sola
-lettura sulla macchina: il token API da solo non abilita `git fetch`.
-
-## 2. Creare EC2 e DNS
-
-- Ubuntu Server **24.04 LTS**, x86_64; 4 vCPU e almeno 8 GB RAM consigliati.
-- EBS gp3 cifrato, almeno 80 GB. I volumi Docker sono sotto `/var/lib/docker`:
-  disabilitare la cancellazione del volume dati alla terminazione dell'istanza.
-- Scegliere una regione UE e usare la stessa per SES e il bucket backup.
-  `eu-west-1` nel generatore è un valore iniziale da confermare.
-- Elastic IP e record DNS A `gym.humans.tech` e `gym-api.humans.tech` verso l'IP.
-  Non creare record AAAA senza IPv6 funzionante sull'istanza.
-- Security Group: TCP 80 e 443 pubblici. Non esporre 5432, 8000, 9999 o 4000.
-- Accesso amministrativo preferibilmente via SSM Session Manager. Associare un
-  instance profile con `AmazonSSMManagedInstanceCore`; verificare SSM Agent e
-  connettività HTTPS in uscita. Se si usa temporaneamente SSH, limitare 22 al
-  proprio IP.
-
-Una EC2 singola non offre alta disponibilità. Un deploy può interrompere le
-connessioni durante il riavvio dei container. Backup giornaliero: perdita dati
-potenziale fino a 24 ore in caso di perdita totale dei volumi; ridurre l'intervallo
-o introdurre backup continui se questo requisito non è sufficiente.
-
-## 3. Bucket backup e ruolo IAM
-
-Creare un bucket S3 privato, con blocco accesso pubblico, cifratura SSE-S3,
-versioning e lifecycle (ad esempio 30 giorni per i dump, gestione esplicita anche
-delle versioni non correnti). Associare al ruolo EC2 la policy
-`deploy/backup-policy.json`, sostituendo `REPLACE_BACKUP_BUCKET` con il nome reale.
-Il prefisso previsto è `gym/`. Non servono access key AWS salvate nei file.
-
-Il backup comprende database e account Auth. Conservare separatamente una copia
-cifrata di `/etc/gym/production.env` in un secret manager/archivio aziendale:
-contiene chiavi JWT e credenziali necessarie al ripristino. Non salvarla nel repo.
-
-## 4. Preparare la macchina
-
-Eseguire sulla EC2, dopo aver portato questa implementazione su `main`:
-
-```bash
-git clone --branch main https://github.com/humanstech/humans-gym-scheduelr.git
-cd humans-gym-scheduelr
-sudo bash scripts/bootstrap-ec2.sh
-sudo python3 scripts/make-env.py --output /etc/gym/production.env
-sudoedit /etc/gym/production.env
-```
-
-L'installer prepara Docker, Compose, AWS CLI e servizi systemd, ma non li abilita.
-Il generatore crea segreti casuali, scrive il file con permessi 600 e rifiuta di
-sovrascriverlo. Non rigenerare i segreti di un database già inizializzato: cambiare
-solo il file non ruota le password già memorizzate nel database.
-
-Completare almeno:
-
-| Variabile | Valore |
+| Servizio | Limite |
 | --- | --- |
-| `APP_DOMAIN` / `SITE_URL` | `gym.humans.tech` / `https://gym.humans.tech` |
-| `API_DOMAIN` / `SUPABASE_PUBLIC_URL` | `gym-api.humans.tech` / `https://gym-api.humans.tech` |
-| `ADMIN_EMAIL` | `marco.ciotoli@humans.tech` |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Credenziali del client OAuth web |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | Endpoint SES della regione, porta 587, credenziali SMTP SES |
-| `SMTP_FROM` | Mittente verificato, ad esempio `gym@humans.tech` |
-| `AWS_REGION` | Regione effettiva |
-| `BACKUP_S3_URI` | `s3://NOME_BUCKET/gym` |
+| PostgreSQL | 768 MiB |
+| Auth | 128 MiB |
+| PostgREST | 192 MiB |
+| Realtime | 512 MiB |
+| Kong | 256 MiB |
+| Web | 96 MiB |
 
-Valori con caratteri speciali o spazi vanno racchiusi tra apici singoli; non usare
-interpolazioni shell nel file. I segreti generati sono già compatibili con le URL
-PostgreSQL. Lasciare `HTTP_BIND=80:80`, `HTTPS_BIND=443:443` e `GOOGLE_ENABLED=true`.
+Totale massimo configurato: 1.906 GiB, oltre alla memoria del daemon/host.
+Questi limiti sono stati provati in locale, non costituiscono una prova di carico
+sulla macchina condivisa. Dati persistenti: volumi `gym_db-data` e `gym_db-config`.
+Non eliminare i volumi durante aggiornamenti o rollback.
 
-## 5. Google e magic link
+## Directory e segreti
 
-In Google Cloud configurare il client OAuth di tipo web:
+`/opt/gym` appartiene a root, modalità 700:
 
-- origine JavaScript autorizzata: `https://gym.humans.tech`;
-- redirect URI: **`https://gym-api.humans.tech/auth/v1/callback`**.
+- `.env`: unica configurazione runtime, permessi 600;
+- `releases/<SHA>/`: codice e riferimenti immagini di una release, non modificare;
+- `current`: symlink aggiornato solo dopo lo smoke HTTPS;
+- `incoming/<SHA>/`: bundle completo, pubblicato tramite rename atomico;
+- `tools/`: script verificati usati dai servizi;
+- `logs/`, `backups/`: solo dati Gym;
+- `deploy.lock`: flock comune a deploy, backup ed aggiornamento del sito edge.
 
-Il callback Google è sul backend; `https://gym.humans.tech/auth/callback` è il
-ritorno all'app ed è già incluso nell'allowlist Auth. Sono due URL diversi.
+Il proprietario compila **`.env.production.local` sul Mac**. L’agente sincronizza
+quel file via SSH in `/opt/gym/.env`, senza mostrarne il contenuto. Non occorre
+un file per Resend o per Google. Vedere [CREDENTIALS.md](CREDENTIALS.md).
+Non cambiare password DB/JWT dopo il primo avvio senza una procedura di rotazione.
 
-In SES verificare il dominio mittente e pubblicare i record DNS richiesti
-(DKIM e configurazione SPF/MAIL FROM applicabile). Richiedere l'uscita dalla
-sandbox nella regione scelta per inviare anche a destinatari non verificati.
-Usare credenziali **SMTP SES**, non le access key IAM generiche. Verificare anche
-che la configurazione del consenso Google consenta agli utenti previsti il login.
+## Flusso develop → main e CI minima
 
-## 6. Primo avvio
+1. Sviluppo e push su `develop`; una sola CI per push.
+2. PR verso `main`; check `verify` obbligatorio. Non fare push diretto su main.
+3. Dopo il merge, attendere la CI del commit su `main`.
+4. Sul Mac ARM o su un builder esterno, creare il bundle di quel main.
+5. Trasferire il bundle completo. Il timer EC2 verifica main, la CI dello stesso
+   SHA, checksum, codice, configurazione pubblica e immagini ARM64; poi effettua
+   il deploy. Se manca il bundle, attende senza modificare il servizio.
 
-Il commit corrente di `main` deve avere una CI verde. DNS, Google, SMTP e S3 devono
-essere configurati prima di procedere.
+GitHub esegue lint, build, test degli script e test SQL. Non esegue build Docker,
+Playwright o upload di immagini. La preparazione/trasmissione del bundle è un
+passaggio dell’operatore sul builder: il solo merge non produce un bundle.
+Questa scelta evita build sulla EC2 condivisa e ulteriori minuti CI. Nessuna
+chiave SSH di produzione viene installata su GitHub o su runner self-hosted.
+
+## Preparare e trasferire il bundle
+
+Sul Mac, dal repository aggiornato:
 
 ```bash
+python3 scripts/bundle.py --env-file .env.production.local --output /tmp/gym-bundles
+```
+
+Lo script preleva `origin/main` in un checkout temporaneo, costruisce con
+`buildx --platform linux/arm64 --load`, assegna a tutte le immagini tag
+`gym-<servizio>:<SHA>` ed esporta `images.tar.gz`, `source.tar` e `bundle.json`.
+Passa al build solo URL e chiave anon pubblica, non gli altri valori dell’env.
+Verifica il bundle prima di dichiararlo pronto. `--development` serve solo per
+prove locali: produce un bundle che la produzione rifiuta.
+
+I checksum rilevano alterazioni e trasferimenti incompleti; non sono una firma
+del builder. L’autenticità dipende dall’accesso SSH e dalla directory root-only.
+Le immagini devono essere costruite da un operatore autorizzato. Il codice nel
+bundle viene confrontato con l’archivio Git dell’esatto main approvato dalla CI.
+
+Per trasferire il bundle (sostituire `<SHA>` con quello stampato dal builder):
+
+```bash
+python3 scripts/upload-bundle.py /tmp/gym-bundles/<SHA> \
+  --ssh-key deploy/ext-backend.pem --env-file .env.production.local
+```
+
+Lo script trasferisce solo i tre file del bundle; non trasferisce l’env. La
+sincronizzazione dell’env viene fatta separatamente dall’agente, via SSH e sotto
+lo stesso lock, dopo che il proprietario ha salvato le credenziali.
+
+Il trasferimento deve scrivere prima in una directory temporanea sotto
+`/opt/gym/incoming`, proprietà root, e rinominarla in `<SHA>` solo al completamento.
+Non scrivere mai in una release esistente né sovrascrivere un bundle pubblicato.
+Non eseguire tar o Docker su file ricevuti da fonti non autorizzate.
+
+## Primo avvio
+
+Prerequisiti già presenti sul server: Ubuntu ARM64, Docker/Compose, Python 3.12+,
+git, ss, flock. Lo script **non installa pacchetti**, non cambia firewall,
+Docker daemon o sysctl. Eseguire da una copia del main verificato:
+
+```bash
+sudo bash scripts/bootstrap-ec2.sh
+```
+
+Crea solo directory Gym, file env se assente e unità `gym-*`. I timer restano
+spenti. Completare/sincronizzare il file env, trasferire il bundle main, quindi:
+
+```bash
+sudo bash scripts/publish-edge.sh
 sudo python3 /opt/gym/tools/production.py bootstrap
 sudo python3 /opt/gym/tools/production.py status
-sudo python3 /opt/gym/tools/production.py backup
 ```
 
-Il bootstrap installa lo schema vuoto, crea l'amministratore nella lista di
-accesso, abilita `humans.tech`, crea Palestra con fasce lun–ven e genera 90 giorni
-di slot. L'account Auth viene creato al primo login, senza password predefinita.
-Caddy emette e rinnova i certificati automaticamente; 80/443 e DNS devono essere
-raggiungibili. La pagina `/version.json` espone lo SHA effettivamente servito.
+`publish-edge.sh` scrive esclusivamente `/opt/edge/conf/sites/gym.caddy` (644),
+esegue il reload indicato dal proprietario e ripristina/rimuove il proprio file
+se il reload fallisce. Non ricrea il container edge. Il primo avvio può mostrare
+502 per Gym tra l’inserimento della rotta e l’avvio dello stack.
 
-Se il comando stampa che sta aspettando la CI, il bootstrap non è ancora
-avvenuto: attendere la CI e ripetere. Verificare che `status` riporti uno SHA e
-che login, prenotazione e cancellazione funzionino prima di abilitare i timer:
+Il deploy controlla porta libera (oppure proprietà del container Gym già attivo),
+architettura nativa, permessi e spazio libero. Carica il bundle senza build o
+pull, applica le migrazioni e avvia con `docker compose up -d --wait`.
+Il seed iniziale abilita `humans.tech` e l’amministratore
+`marco.ciotoli@humans.tech`. Lo smoke verifica HTTPS, `/healthz`, SHA del frontend,
+Auth e REST. Solo dopo aggiorna `current` e lo stato della release.
+
+Se lo smoke fallisce, ripristina i container della release precedente; le
+migrazioni DB restano applicate. Usare solo migrazioni compatibili con la release
+precedente. Sul primo bootstrap fallito non esiste una release precedente.
+Un fallimento registra lo SHA e impedisce tentativi ripetuti dal timer.
+
+Dopo avere verificato login, email e realtime:
 
 ```bash
-sudo systemctl enable --now gym-deploy.timer gym-backup.timer
-systemctl list-timers 'gym-*'
+sudo systemctl enable --now gym-deploy.timer
+sudo journalctl -u gym-deploy.service -n 50 --no-pager
 ```
 
-## 7. Rilasci successivi e diagnostica
-
-Push su `develop`, CI verde, PR e merge su `main`. Nessun comando sulla macchina
-è necessario per i rilasci ordinari. Prima delle migrazioni viene salvato un dump
-locale e caricato su S3; un errore nel backup interrompe il deploy.
+Per ritentare lo stesso main dopo aver risolto un errore:
 
 ```bash
-sudo python3 /opt/gym/tools/production.py status
-sudo journalctl -u gym-deploy.service -n 100 --no-pager
-sudo journalctl -u gym-backup.service -n 100 --no-pager
 sudo python3 /opt/gym/tools/production.py retry
 ```
 
-Per usare Compose sulla release attiva, preservare lo SHA dell'immagine:
+## Backup: disabilitati per scelta del proprietario
+
+La richiesta successiva del proprietario esclude i backup dai prerequisiti.
+`BACKUP_BEFORE_DEPLOY=false`; **non abilitare `gym-backup.timer`**. Nessun bucket
+S3 o credenziale AWS è necessario. Il rollback non ripristina dati persi o
+modificati dalle migrazioni.
+
+Resta disponibile, se richiesto, il backup manuale:
 
 ```bash
-cd /opt/gym/current
-release_sha=$(basename "$(readlink -f /opt/gym/current)")
-sudo python3 scripts/stack.py compose --env-file /etc/gym/production.env \
-  --sha "$release_sha" -- ps
+sudo python3 /opt/gym/tools/production.py backup
 ```
 
-Verificare periodicamente spazio disco, memoria, stato container, errori dei
-servizi systemd, presenza e data dei backup S3. Configurare allarmi CloudWatch per
-EC2 StatusCheckFailed e, con CloudWatch Agent, memoria/disco e log systemd.
-I log Docker ruotano automaticamente (3 file da 10 MB per servizio).
+Produce un dump PostgreSQL in `/opt/gym/backups`, privato, verificato con
+`pg_restore --list`. Il comando elimina i dump locali più vecchi di 7 giorni dopo
+un nuovo backup riuscito. S3 resta opzionale e richiede AWS CLI e permessi, da
+concordare prima di installare qualsiasi pacchetto. Impostare
+`BACKUP_BEFORE_DEPLOY=true` riattiva il backup prima delle migrazioni successive;
+la sua riuscita diventa allora obbligatoria.
 
-Controllare i job SQL via SSM/Compose:
+Un vero ripristino richiede un database isolato con le stesse versioni e ruoli.
+Non usare `pg_restore --clean` sul database attivo. La prova di ripristino
+precedente alla revisione di questo deploy è avvenuta solo in locale; nessun
+ripristino è stato eseguito sulla produzione condivisa.
+
+## Verifiche da registrare dopo il deploy
 
 ```bash
-sudo python3 scripts/stack.py compose --env-file /etc/gym/production.env \
-  --sha "$release_sha" -- exec -T db psql -U postgres -d postgres -c \
-  "SELECT jobname,schedule,active FROM cron.job"
+curl -fsS https://gym.humans.tech/healthz
+curl -fsS https://gym.humans.tech/version.json
+sudo docker compose --project-name edge --project-directory /opt/edge \
+  --env-file /opt/edge/.env -f /opt/edge/compose.yml logs --tail 50 caddy
 ```
 
-`gym-generate-slots` gira alle 03:00 UTC; `gym-cancel-underfilled` ogni minuto.
-Date e soglia di 15 minuti sono calcolate in `Europe/Rome` nel database, inclusa
-l'ora legale. Controllare gli errori recenti in `cron.job_run_details`.
+Controllare nei log l’emissione del certificato per Gym. Per verificare la
+persistenza al riavvio, in una finestra concordata riavviare **solo** i container
+con label `com.docker.compose.project=gym` e ricontrollare HTTPS, login e dati.
+Non riavviare edge o CyberMafia. Registrare l’esito effettivo in
+[DEPLOYMENT-STATUS.md](DEPLOYMENT-STATUS.md), distinguendo prove locali e reali.
 
-## 8. Rollback
+## Disco e manutenzione
 
-Il deploy conserva la release precedente e torna ad essa automaticamente se
-l'avvio o i controlli HTTP falliscono. Le migrazioni del database già applicate
-restano in vigore: scrivere migrazioni compatibili con la versione precedente
-(aggiungere prima, rimuovere solo in un rilascio successivo). Gli aggiornamenti
-major di PostgreSQL richiedono una procedura dedicata e non un normale merge.
+Il deploy richiede spazio per importare il bundle più una riserva di 2 GiB;
+non libera spazio automaticamente. Il controllo è prudenziale e può richiedere
+pulizia anche quando alcuni layer sono già presenti. Dopo un rilascio riuscito,
+eliminare solo bundle Gym trasferiti e immagini `gym-*:<SHA>` non più necessari,
+conservando la release corrente e la precedente per il rollback. Rimuovere i tag
+esatti con `docker image rm`, mai usare prune globale. I layer condivisi ancora
+referenziati dagli altri progetti rimangono presenti.
 
-Per un rollback applicativo duraturo, creare un **revert su develop**, verificarlo
-e promuoverlo su main. In questo modo la produzione continua a seguire main.
-Non resettare/forzare il branch e non modificare a mano i file nella release.
-
-In emergenza fermare il timer prima di intervenire:
-
-```bash
-sudo systemctl stop gym-deploy.timer
-```
-
-Per recuperare un deploy fermato da timeout, verificare i container e il journal,
-poi usare `retry`: accetta comunque solo il main corrente con CI verde. Riabilitare
-il timer quando lo stato è coerente. Lo stop del timer non ferma un deploy già in
-corso: attendere che `gym-deploy.service` termini prima di fare manutenzione.
-
-## 9. Backup e ripristino
-
-I dump sono in `/opt/gym/backups/`, permessi privati, e sul prefisso S3.
-Il backup giornaliero rimuove i dump locali più vecchi di 7 giorni; il lifecycle
-S3 gestisce la retention remota. Conservare le ultime release/immagini per il
-rollback e rimuovere periodicamente quelle obsolete, senza cancellare volumi.
-
-Provare il restore su una **seconda EC2 isolata**, con la stessa versione dello
-stack e i segreti salvati. Non ripristinare direttamente sul database in uso:
-
-1. Fermare i timer sulla macchina di destinazione. Usare la stessa versione
-   dello stack del backup e il file di segreti salvato.
-2. Avviare `db auth rest realtime` con Compose e attendere lo stato healthy:
-   questo inizializza anche i ruoli interni dei servizi. Non avviare `web`.
-3. Fermare `auth rest realtime`; mantenere soltanto `db`. Scaricare il dump S3.
-4. Ricreare il database di destinazione da `template0` e ripristinare il dump in
-   una transazione, come sotto. È una procedura **distruttiva**, da eseguire
-   esclusivamente sulla macchina isolata destinata al ripristino.
-5. Verificare utenti, prenotazioni, policy, migrazioni e `cron.job`; riavviare i
-   servizi e controllare login e prenotazioni prima di spostare il DNS.
-
-Esempio sulla macchina di ripristino, dalla directory della release del backup:
-
-```bash
-# Definire il percorso del dump scaricato da S3.
-backup_file=/opt/gym/backups/backup-DA-RIPRISTINARE.dump
-compose=(sudo docker compose --project-name gym \
-  --env-file /etc/gym/production.env -f deploy/compose.yml)
-"${compose[@]}" up -d --wait db auth rest realtime
-"${compose[@]}" stop auth rest realtime
-"${compose[@]}" exec -T db pg_restore --list < "$backup_file"
-# ATTENZIONE: distrugge il database postgres della macchina di destinazione.
-"${compose[@]}" exec -T db psql -X -U supabase_admin -d template1 \
-  -v ON_ERROR_STOP=1 \
-  -c 'DROP DATABASE postgres WITH (FORCE)' \
-  -c 'CREATE DATABASE postgres OWNER postgres TEMPLATE template0'
-"${compose[@]}" exec -T db pg_restore -U supabase_admin -d postgres \
-  --single-transaction --exit-on-error < "$backup_file"
-```
-
-Usare `supabase_admin` per mantenere proprietari e privilegi degli oggetti Auth e
-Realtime. Non usare `--no-owner` e non fare `--clean` su uno schema Supabase già
-popolato: trigger di sistema e partizioni Realtime richiedono il ripristino su un
-database vuoto. La transazione mantiene disabilitati gli effetti dei job
-ripristinati fino al completamento del restore. Ricostruire quindi l'immagine
-con lo SHA originale e usare lo stesso `RELEASE_SHA` per avviare `web`; verificare
-`/version.json`. Il nuovo host deve avere il suo `deployed.json` coerente prima
-di riabilitare il polling: il percorso ordinario è il bootstrap sul main
-validato dopo il restore, con migrazioni e seed idempotenti.
-
-Gli oggetti Auth sono inclusi nel dump. Per preservare la validità dei token
-servono le stesse chiavi; in caso di rotazione pianificare un nuovo login degli
-utenti. Lo stack non usa Supabase Storage: non ci sono file applicativi da migrare.
-I certificati possono essere riemessi; i dati PostgreSQL non devono dipendere dal
-ciclo di vita di una release Git.
-
-## Riferimenti
-
-- [Supabase self-hosting](https://supabase.com/docs/guides/self-hosting/docker)
-- [Google OAuth self-hosted](https://supabase.com/docs/guides/self-hosting/self-hosted-oauth)
-- [SES produzione](https://docs.aws.amazon.com/ses/latest/dg/request-production-access.html)
-- [Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html)
-- [GitHub Actions billing](https://docs.github.com/en/actions/concepts/billing-and-usage)
+Non modificare `/opt/cybermafia`, le reti, i volumi o i timer altrui, né i file
+globali dell’edge. Non cambiare la porta assegnata senza il proprietario.

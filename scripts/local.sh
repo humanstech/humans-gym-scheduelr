@@ -12,7 +12,7 @@ case "${1:-up}" in
     python3 scripts/stack.py seed --env-file .env.stack.local --project gym-local
     "${compose[@]}" build web
     "${compose[@]}" up -d --wait --wait-timeout 180 web
-    echo 'App: http://localhost:8080 | API: http://localhost:8000 | local email: http://localhost:8025'
+    echo 'App: http://localhost:8080 | API: http://localhost:8080 | local email: http://localhost:8025'
     ;;
   down) "${compose[@]}" down ;;
   logs) "${compose[@]}" logs --tail=50 ;;

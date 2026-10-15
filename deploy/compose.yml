@@ -2,6 +2,7 @@ name: gym
 
 x-service: &service
   restart: unless-stopped
+  platform: linux/arm64
   logging:
     driver: json-file
     options:
@@ -11,12 +12,13 @@ x-service: &service
 services:
   db:
     <<: *service
-    image: public.ecr.aws/supabase/postgres:17.6.1.171
+    image: ${DB_IMAGE:-public.ecr.aws/supabase/postgres:17.6.1.171}
+    mem_limit: 768m
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Generate the environment first}
       POSTGRES_DB: postgres
       JWT_EXP: 3600
-    command: [postgres, -c, config_file=/etc/postgresql/postgresql.conf, -c, log_min_messages=warning]
+    command: [postgres, -c, config_file=/etc/postgresql/postgresql.conf, -c, log_min_messages=warning, -c, shared_buffers=128MB, -c, max_connections=100]
     volumes:
       - db-data:/var/lib/postgresql/data
       - db-config:/etc/postgresql-custom
@@ -33,7 +35,8 @@ services:
 
   auth:
     <<: *service
-    image: public.ecr.aws/supabase/gotrue:v2.197.0
+    image: ${AUTH_IMAGE:-public.ecr.aws/supabase/gotrue:v2.197.0}
+    mem_limit: 128m
     depends_on:
       db: {condition: service_healthy}
     environment:
@@ -77,7 +80,8 @@ services:
 
   rest:
     <<: *service
-    image: postgrest/postgrest:v14.17
+    image: ${REST_IMAGE:-postgrest/postgrest:v14.17}
+    mem_limit: 192m
     depends_on:
       db: {condition: service_healthy}
     environment:
@@ -95,8 +99,8 @@ services:
 
   realtime:
     <<: *service
-    image: supabase/realtime:v2.134.10
-    container_name: realtime-dev.${COMPOSE_PROJECT_NAME:-gym}-realtime
+    image: ${REALTIME_IMAGE:-supabase/realtime:v2.134.10}
+    mem_limit: 512m
     networks:
       default:
         aliases: [realtime-dev.realtime]
@@ -114,7 +118,7 @@ services:
       API_JWT_SECRET: ${JWT_SECRET}
       SECRET_KEY_BASE: ${SECRET_KEY_BASE}
       METRICS_JWT_SECRET: ${JWT_SECRET}
-      ERL_AFLAGS: -proto_dist inet_tcp
+      ERL_AFLAGS: -proto_dist inet_tcp +S 2:2
       DNS_NODES: "''"
       RLIMIT_NOFILE: 10000
       APP_NAME: realtime
@@ -128,12 +132,16 @@ services:
 
   gateway:
     <<: *service
-    image: kong/kong:3.9.3
+    image: ${GATEWAY_IMAGE:-kong/kong:3.9.3}
+    mem_limit: 256m
     depends_on:
       auth: {condition: service_healthy}
       rest: {condition: service_healthy}
       realtime: {condition: service_healthy}
     environment:
+      KONG_TRUSTED_IPS: 127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,::1/128,fc00::/7
+      KONG_REAL_IP_HEADER: X-Forwarded-For
+      KONG_REAL_IP_RECURSIVE: "on"
       KONG_DATABASE: "off"
       KONG_DECLARATIVE_CONFIG: /tmp/kong.yml
       KONG_PROXY_LISTEN: 0.0.0.0:8000
@@ -155,7 +163,8 @@ services:
 
   web:
     <<: *service
-    image: gym-web:${RELEASE_SHA:-local}
+    image: ${WEB_IMAGE:-gym-web:local}
+    mem_limit: 96m
     build:
       context: ..
       args:
@@ -164,19 +173,15 @@ services:
         RELEASE_SHA: ${RELEASE_SHA:-local}
     depends_on:
       gateway: {condition: service_healthy}
-    environment:
-      APP_DOMAIN: ${APP_DOMAIN}
-      API_DOMAIN: ${API_DOMAIN}
-      TLS_EMAIL: ${TLS_EMAIL}
     ports:
-      - ${HTTP_BIND:-80:80}
-      - ${HTTPS_BIND:-443:443}
-    volumes:
-      - caddy-data:/data
-      - caddy-config:/config
+      - "127.0.0.1:${GYM_PORT:?Set the assigned loopback port}:8080"
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8080/healthz]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
 volumes:
   db-data:
   db-config:
-  caddy-data:
-  caddy-config:

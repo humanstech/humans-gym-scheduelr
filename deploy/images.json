@@ -1,0 +1,7 @@
+{
+  "db": "public.ecr.aws/supabase/postgres:17.6.1.171",
+  "auth": "public.ecr.aws/supabase/gotrue:v2.197.0",
+  "rest": "postgrest/postgrest:v14.17",
+  "realtime": "supabase/realtime:v2.134.10",
+  "gateway": "kong/kong:3.9.3"
+}

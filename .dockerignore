@@ -9,3 +9,8 @@ playwright-report
 .claude
 .playwright-mcp
 docs
+
+*.pem
+**/*.pem
+bundles
+*.dump

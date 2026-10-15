@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Shared Compose and migration operations; secrets stay outside release directories."""
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -33,6 +34,10 @@ class Stack:
         self.env_file = Path(env_file).resolve()
         self.env = read_env(self.env_file)
         self.process_env = dict(os.environ, RELEASE_SHA=sha, COMPOSE_PROJECT_NAME=project)
+        image_file = self.release / '.gym-images.json'
+        if image_file.is_file():
+            for service, info in json.loads(image_file.read_text()).items():
+                self.process_env[service.upper() + '_IMAGE'] = info['tag']
         self.command = ['docker', 'compose', '--project-name', project, '--env-file', str(self.env_file),
                         '-f', str(self.release / 'deploy/compose.yml')]
 

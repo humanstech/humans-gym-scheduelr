@@ -22,6 +22,7 @@ dist-ssr
 *.dump
 __pycache__/
 *.pyc
+deploy/ext-backend.pem
 
 # Editor directories and files
 .vscode/*
@@ -39,3 +40,8 @@ __pycache__/
 tests/.auth/
 test-results/
 playwright-report/
+
+# Deployment credentials and local release bundles
+*.pem
+*.key
+bundles/

@@ -25,11 +25,9 @@ def generate(local=False):
         return payload + '.' + signature
 
     return {
-        'APP_DOMAIN': 'http://localhost:8080' if local else 'gym.humans.tech',
-        'API_DOMAIN': 'http://localhost:8000' if local else 'gym-api.humans.tech',
+        'APP_DOMAIN': 'localhost' if local else 'gym.humans.tech',
         'SITE_URL': 'http://localhost:8080' if local else 'https://gym.humans.tech',
-        'SUPABASE_PUBLIC_URL': 'http://localhost:8000' if local else 'https://gym-api.humans.tech',
-        'TLS_EMAIL': 'marco.ciotoli@humans.tech',
+        'SUPABASE_PUBLIC_URL': 'http://localhost:8080' if local else 'https://gym.humans.tech',
         'ADDITIONAL_REDIRECT_URLS': 'http://localhost:8080/auth/callback,http://localhost:5173/auth/callback' if local else 'https://gym.humans.tech/auth/callback',
         'ADMIN_EMAIL': 'marco.ciotoli@humans.tech',
         'POSTGRES_PASSWORD': secrets.token_hex(32),
@@ -41,15 +39,15 @@ def generate(local=False):
         'GOOGLE_ENABLED': 'false' if local else 'true',
         'GOOGLE_CLIENT_ID': '',
         'GOOGLE_CLIENT_SECRET': '',
-        'SMTP_HOST': 'mailpit' if local else '',
+        'SMTP_HOST': 'mailpit' if local else 'smtp.resend.com',
         'SMTP_PORT': '1025' if local else '587',
-        'SMTP_USER': '',
+        'SMTP_USER': '' if local else 'resend',
         'SMTP_PASS': '',
-        'SMTP_FROM': 'gym@humans.tech',
-        'HTTP_BIND': '127.0.0.1:8080:8080' if local else '80:80',
-        'HTTPS_BIND': '127.0.0.1:8000:8000' if local else '443:443',
+        'SMTP_FROM': 'gym@services.humans.tech',
+        'GYM_PORT': '8080' if local else '18200',
+        'BACKUP_BEFORE_DEPLOY': 'false',
         'BACKUP_S3_URI': '',
-        'AWS_REGION': 'eu-west-1',
+        'AWS_REGION': '',
         'GITHUB_REPOSITORY': 'humanstech/humans-gym-scheduelr',
         'GITHUB_TOKEN': '',
     }
@@ -65,4 +63,4 @@ if __name__ == '__main__':
     with os.fdopen(fd, 'w') as file:
         for key, value in generate(args.local).items():
             file.write(f'{key}={value}\n')
-    print(f'Environment generated: {args.output}. Complete OAuth, SMTP, region and backup configuration before production.')
+    print(f'Environment generated: {args.output}. Complete OAuth and SMTP configuration before production.')
