@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { format, subDays } from 'date-fns'
 import type React from 'react'
 import { ShieldCheck, Users, TrendingUp } from 'lucide-react'
@@ -11,6 +12,10 @@ import { ExportButton } from '@/components/admin/ExportButton'
 import { AccessControl } from '@/components/admin/AccessControl'
 import { Spaces } from '@/components/admin/Spaces'
 import { SpaceComparisonChart } from '@/components/admin/SpaceComparisonChart'
+import { UsersTab } from '@/components/admin/users/UsersTab'
+import { UserDetailSheet } from '@/components/admin/users/UserDetailSheet'
+import { PtTab } from '@/components/admin/pt/PtTab'
+import { LowBalanceBanner } from '@/components/admin/pt/LowBalanceBanner'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useAdminBookings } from '@/hooks/useAdminBookings'
@@ -52,6 +57,11 @@ function useSpaces() {
   })
 }
 
+const TABS = ['statistiche', 'spazi', 'utenti', 'pt', 'accessi'] as const
+type AdminTab = (typeof TABS)[number]
+
+const isAdminTab = (v: string | null): v is AdminTab => TABS.includes(v as AdminTab)
+
 const RANGES = [
   { label: 'Ultimi 7 giorni', days: 7 },
   { label: 'Ultimi 30 giorni', days: 30 },
@@ -75,6 +85,18 @@ function StatCard({ icon: Icon, label, value }: {
 }
 
 export function Admin() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const tab: AdminTab = isAdminTab(tabParam) ? tabParam : 'statistiche'
+  const setTab = (next: AdminTab) => {
+    setSearchParams(prev => {
+      const params = new URLSearchParams(prev)
+      if (next === 'statistiche') params.delete('tab')
+      else params.set('tab', next)
+      return params
+    }, { replace: true })
+  }
+  const [openUserId, setOpenUserId] = useState<string | null>(null)
   const [rangeDays, setRangeDays] = useState(7)
   const [spaceId, setSpaceId] = useState<string | undefined>(undefined)
   // Stable date string — no milliseconds, queryKey doesn't change on every render
@@ -118,10 +140,17 @@ export function Admin() {
         </div>
       </div>
 
-      <Tabs defaultValue="statistiche">
+      <LowBalanceBanner onView={() => setTab('pt')} />
+
+      <Tabs value={tab} onValueChange={value => setTab(value as AdminTab)}>
         <TabsList variant="line">
           <TabsTrigger value="statistiche">Statistiche</TabsTrigger>
           <TabsTrigger value="spazi">Spazi</TabsTrigger>
+          <TabsTrigger value="utenti">Utenti</TabsTrigger>
+          <TabsTrigger value="pt">
+            <span className="sm:hidden">PT</span>
+            <span className="hidden sm:inline">Personal trainer</span>
+          </TabsTrigger>
           <TabsTrigger value="accessi">Accessi</TabsTrigger>
         </TabsList>
 
@@ -240,12 +269,24 @@ export function Admin() {
           </div>
         </TabsContent>
 
+        <TabsContent value="utenti" className="pt-6">
+          <div className="rounded-lg border bg-card p-4 sm:p-6">
+            <UsersTab onOpenUser={setOpenUserId} />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="pt" className="pt-6">
+          <PtTab onOpenUser={setOpenUserId} />
+        </TabsContent>
+
         <TabsContent value="accessi" className="pt-6">
           <div className="rounded-lg border bg-card p-6">
             <AccessControl />
           </div>
         </TabsContent>
       </Tabs>
+
+      <UserDetailSheet userId={openUserId} onOpenChange={open => !open && setOpenUserId(null)} />
     </div>
   )
 }

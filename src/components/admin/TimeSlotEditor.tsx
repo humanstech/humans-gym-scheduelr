@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { Plus, Trash2, Copy } from 'lucide-react'
+import { Plus, Trash2, Copy, Dumbbell } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { toast } from 'sonner'
-import { useSpaceTimeSlots, useAddTimeSlot, useRemoveTimeSlot, useCopyDaySlots } from '@/hooks/useSpaceConfig'
+import { useSpaceTimeSlots, useAddTimeSlot, useRemoveTimeSlot, useCopyDaySlots, useToggleTimeSlotPt } from '@/hooks/useSpaceConfig'
 
 const DAY_LABELS: Record<number, string> = {
   1: "Lun", 2: "Mar", 3: "Mer", 4: "Gio", 5: "Ven", 6: "Sab", 7: "Dom",
@@ -54,6 +54,7 @@ export function TimeSlotEditor({ spaceId, availableDays }: TimeSlotEditorProps) 
   const addSlot = useAddTimeSlot()
   const removeSlot = useRemoveTimeSlot()
   const copySlots = useCopyDaySlots()
+  const togglePt = useToggleTimeSlotPt()
 
   const daySlots = slots.filter(s => s.day_of_week === selectedDay)
   const endTime = addMinutes(startTime, durationMinutes)
@@ -95,6 +96,13 @@ export function TimeSlotEditor({ spaceId, availableDays }: TimeSlotEditorProps) 
     } catch {
       toast.error('Errore durante la copia.')
     }
+  }
+
+  const handleTogglePt = (id: string, isPt: boolean) => {
+    togglePt.mutate(
+      { id, spaceId, isPt },
+      { onError: () => toast.error("Errore durante l'aggiornamento della fascia.") }
+    )
   }
 
   const handleRemove = (id: string) => {
@@ -156,9 +164,28 @@ export function TimeSlotEditor({ spaceId, availableDays }: TimeSlotEditorProps) 
                   key={slot.id}
                   className="group flex items-center justify-between rounded-md border bg-background px-3 py-2 text-sm hover:border-border/80 transition-colors"
                 >
-                  <span className="font-mono text-xs tracking-wide">
-                    {fmt(slot.start_time)} – {fmt(slot.end_time)}
-                  </span>
+                  <div className="flex items-center gap-2.5">
+                    <span className="font-mono text-xs tracking-wide">
+                      {fmt(slot.start_time)} – {fmt(slot.end_time)}
+                    </span>
+                    <button
+                      type="button"
+                      aria-pressed={slot.is_pt}
+                      onClick={() => handleTogglePt(slot.id, !slot.is_pt)}
+                      disabled={togglePt.isPending && togglePt.variables?.id === slot.id}
+                      title={slot.is_pt ? 'Fascia riservata al Personal Trainer' : 'Riserva questa fascia al Personal Trainer'}
+                      aria-label={`${slot.is_pt ? 'Rimuovi' : 'Riserva'} PT per la fascia ${fmt(slot.start_time)}–${fmt(slot.end_time)}`}
+                      className={cn(
+                        'inline-flex h-5 items-center gap-1 rounded-full border px-1.5 text-[10px] font-medium transition-colors disabled:opacity-50',
+                        slot.is_pt
+                          ? 'border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300'
+                          : 'border-dashed border-input text-muted-foreground/70 hover:border-violet-500/40 hover:text-violet-700 dark:hover:text-violet-300'
+                      )}
+                    >
+                      <Dumbbell className="h-3 w-3" />
+                      PT
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => handleRemove(slot.id)}
@@ -211,6 +238,13 @@ export function TimeSlotEditor({ spaceId, availableDays }: TimeSlotEditorProps) 
               Aggiungi
             </Button>
           </div>
+
+          {daySlots.some(s => s.is_pt) && (
+            <p className="text-xs text-muted-foreground">
+              Le fasce <span className="font-medium text-violet-700 dark:text-violet-300">PT</span> diventano
+              sedute riservate agli iscritti quando salvi lo spazio.
+            </p>
+          )}
 
           {/* Copy to another day */}
           {daySlots.length > 0 && otherDays.length > 0 && (

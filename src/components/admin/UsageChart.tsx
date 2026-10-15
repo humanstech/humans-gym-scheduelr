@@ -24,7 +24,7 @@ interface UsageChartProps {
 }
 
 const SPACE_COLORS = [
-  'hsl(var(--primary))',
+  'var(--primary)',
   '#f97316',
   '#22c55e',
   '#a855f7',
@@ -134,9 +134,9 @@ export function UsageChart({ bookings, spaces }: UsageChartProps) {
         <Line
           type="monotone"
           dataKey="count"
-          stroke="hsl(var(--primary))"
+          stroke="var(--primary)"
           strokeWidth={2}
-          dot={<Dot r={3} fill="hsl(var(--primary))" />}
+          dot={<Dot r={3} fill="var(--primary)" />}
           activeDot={{ r: 5 }}
         />
       </LineChart>

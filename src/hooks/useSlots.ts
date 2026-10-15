@@ -14,6 +14,14 @@ export interface SlotWithCount {
   booking_count: number
   bookers: { name: string; avatarUrl?: string }[]
   space_name?: string
+  pt_status: 'active' | 'voided' | null
+}
+
+type PtSessionEmbed = { status: 'active' | 'voided' } | { status: 'active' | 'voided' }[] | null
+
+export function ptStatusOf(embed: PtSessionEmbed | undefined): SlotWithCount['pt_status'] {
+  const row = Array.isArray(embed) ? embed[0] : embed
+  return row?.status ?? null
 }
 
 export function useSlots(date: Date, spaceId?: string) {
@@ -30,6 +38,7 @@ export function useSlots(date: Date, spaceId?: string) {
         { event: '*', schema: 'public', table: 'slots' },
         () => {
           queryClient.invalidateQueries({ queryKey: ['slots', dateStr, spaceId] })
+          queryClient.invalidateQueries({ queryKey: ['pt', 'preview', dateStr] })
         }
       )
       .subscribe()
@@ -44,7 +53,7 @@ export function useSlots(date: Date, spaceId?: string) {
     queryFn: async (): Promise<SlotWithCount[]> => {
       let query = supabase
         .from('slots')
-        .select('id, date, start_time, end_time, max_capacity, min_capacity, is_cancelled, spaces(name)')
+        .select('id, date, start_time, end_time, max_capacity, min_capacity, is_cancelled, spaces(name), pt_sessions(status)')
         .eq('date', dateStr)
         .order('start_time')
 
@@ -72,9 +81,10 @@ export function useSlots(date: Date, spaceId?: string) {
       }
 
       return slots.map(s => {
-        const { spaces, ...rest } = s
+        const { spaces, pt_sessions, ...rest } = s
         return {
           ...rest,
+          pt_status: ptStatusOf(pt_sessions),
           booking_count: countMap[s.id] ?? 0,
           bookers: bookersMap[s.id] ?? [],
           space_name: spaces?.name,

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build an ARM64 bundle outside production. Only main is eligible for deployment."""
 import argparse
+import base64
 import hashlib
 import io
 import json
@@ -10,6 +11,7 @@ import re
 import subprocess
 import tarfile
 import tempfile
+from urllib.parse import urlparse
 
 from stack import read_env, run
 
@@ -140,6 +142,21 @@ def verify_bundle(path, sha, source_hash, public_url, anon_key, expected_branch=
     return manifest
 
 
+def public_config(env, development):
+    """Only the public URL and anon key reach the web build (never dev-login flags)."""
+    url, key = env['SUPABASE_PUBLIC_URL'], env['ANON_KEY']
+    if not url.startswith(('https://', 'http://localhost:')) or not key or key.startswith('sb_secret_'):
+        raise ValueError('Invalid public build configuration')
+    if development and urlparse(url).hostname not in ('localhost', '127.0.0.1'):
+        # A development image talking to a real backend would send real auth emails.
+        raise ValueError('--development bundles must target a localhost backend (use .env.stack.local)')
+    if key.count('.') == 2:
+        payload = json.loads(base64.urlsafe_b64decode(key.split('.')[1] + '==='))
+        if payload.get('role') != 'anon':
+            raise ValueError('Only the public anon key may be embedded')
+    return url, key
+
+
 def build(args):
     repo = Path(__file__).resolve().parents[1]
     def git(*values):
@@ -154,15 +171,7 @@ def build(args):
         path = Path(name)
         if path.suffix in ('.pem', '.key', '.dump') or (path.name.startswith('.env') and not path.name.endswith('.example')):
             raise ValueError('Refusing to bundle a tracked credential/data file: ' + name)
-    public = read_env(args.env_file)
-    url, key = public['SUPABASE_PUBLIC_URL'], public['ANON_KEY']
-    if not url.startswith(('https://', 'http://localhost:')) or not key or key.startswith('sb_secret_'):
-        raise ValueError('Invalid public build configuration')
-    if key.count('.') == 2:
-        import base64
-        payload = json.loads(base64.urlsafe_b64decode(key.split('.')[1] + '==='))
-        if payload.get('role') != 'anon':
-            raise ValueError('Only the public anon key may be embedded')
+    url, key = public_config(read_env(args.env_file), args.development)
     output = Path(args.output).resolve() / sha
     output.parent.mkdir(parents=True, exist_ok=True)
     if output.exists():
@@ -218,7 +227,10 @@ def build(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--env-file', default='.env.production.local', help='Only the public URL and anon key are passed to the build')
+    parser.add_argument('--env-file', help='Only the public URL and anon key are passed to the build '
+                        '(default: .env.production.local, or .env.stack.local with --development)')
     parser.add_argument('--output', required=True)
     parser.add_argument('--development', action='store_true', help='Local verification only; production rejects these bundles')
-    build(parser.parse_args())
+    args = parser.parse_args()
+    args.env_file = args.env_file or ('.env.stack.local' if args.development else '.env.production.local')
+    build(args)

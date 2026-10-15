@@ -71,7 +71,7 @@ export function UserChart({ bookings }: UserChartProps) {
           {data.map((_, i) => {
             const BAR_OPACITY_BASE = 0.85
             const BAR_OPACITY_STEP = 0.06
-            return <Cell key={i} fill="hsl(var(--primary))" opacity={BAR_OPACITY_BASE - i * BAR_OPACITY_STEP} />
+            return <Cell key={i} fill="var(--primary)" opacity={BAR_OPACITY_BASE - i * BAR_OPACITY_STEP} />
           })}
         </Bar>
       </BarChart>

@@ -9,6 +9,11 @@ from pathlib import Path
 import secrets
 import time
 import json
+import sys
+from urllib.parse import urlparse
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from stack import read_env  # noqa: E402
 
 
 def generate(local=False):
@@ -24,7 +29,7 @@ def generate(local=False):
         signature = base64.urlsafe_b64encode(hmac.new(jwt_secret.encode(), payload.encode(), hashlib.sha256).digest()).rstrip(b'=').decode()
         return payload + '.' + signature
 
-    return {
+    values = {
         'APP_DOMAIN': 'localhost' if local else 'gym.humans.tech',
         'SITE_URL': 'http://localhost:8080' if local else 'https://gym.humans.tech',
         'SUPABASE_PUBLIC_URL': 'http://localhost:8080' if local else 'https://gym.humans.tech',
@@ -51,13 +56,45 @@ def generate(local=False):
         'GITHUB_REPOSITORY': 'humanstech/humans-gym-scheduelr',
         'GITHUB_TOKEN': '',
     }
+    if local:
+        # Shared password of the local quick-login personas (scripts/stack.py dev-users).
+        values['DEV_LOGIN_PASSWORD'] = secrets.token_urlsafe(24)
+    return values
+
+
+# Independent of every other secret, so safe to add to an existing file.
+APPENDABLE = ('ADDITIONAL_REDIRECT_URLS', 'DEV_LOGIN_PASSWORD')
+
+
+def add_missing(path, local=True):
+    """Append missing independent keys without touching existing values."""
+    current = read_env(path)
+    host = urlparse(current.get('SUPABASE_PUBLIC_URL', '')).hostname
+    if not local or host not in ('localhost', '127.0.0.1'):
+        raise SystemExit('Only a localhost environment file can be updated in place')
+    fresh = generate(local=True)
+    added = [key for key in APPENDABLE if key not in current]
+    if added:
+        text = Path(path).read_text()
+        with Path(path).open('a') as file:
+            if text and not text.endswith('\n'):
+                file.write('\n')
+            for key in added:
+                file.write(f'{key}={fresh[key]}\n')
+    return added
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--local', action='store_true')
     parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--add-missing', action='store_true',
+                        help=f'Existing local file: append only missing {", ".join(APPENDABLE)}')
     args = parser.parse_args()
+    if args.add_missing:
+        added = add_missing(args.output, args.local)
+        print(f'Added to {args.output}: {", ".join(added)}' if added else f'{args.output} is up to date')
+        raise SystemExit(0)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(args.output, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     with os.fdopen(fd, 'w') as file:

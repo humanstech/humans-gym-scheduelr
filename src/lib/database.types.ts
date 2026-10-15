@@ -6,6 +6,8 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+export type PtMode = 'pooled' | 'shared' | 'custom' | 'free' | 'voided'
+
 export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
@@ -109,6 +111,224 @@ export type Database = {
           },
         ]
       }
+      pt_memberships: {
+        Row: {
+          created_at: string
+          id: string
+          note: string | null
+          user_id: string
+          valid_from: string
+          valid_to: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          user_id: string
+          valid_from: string
+          valid_to?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          user_id?: string
+          valid_from?: string
+          valid_to?: string | null
+        }
+        Relationships: []
+      }
+      pt_session_exclusions: {
+        Row: {
+          created_at: string
+          reason: string | null
+          slot_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          reason?: string | null
+          slot_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          reason?: string | null
+          slot_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pt_session_exclusions_slot_id_fkey"
+            columns: ["slot_id"]
+            isOneToOne: false
+            referencedRelation: "slots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pt_session_payers: {
+        Row: {
+          created_at: string
+          slot_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          slot_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          slot_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pt_session_payers_slot_id_fkey"
+            columns: ["slot_id"]
+            isOneToOne: false
+            referencedRelation: "slots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pt_sessions: {
+        Row: {
+          billing_mode: 'auto' | 'custom'
+          created_at: string
+          price_cents: number
+          slot_id: string
+          source: 'schedule' | 'manual'
+          status: 'active' | 'voided'
+          voided_at: string | null
+          voided_reason: string | null
+        }
+        Insert: {
+          billing_mode?: 'auto' | 'custom'
+          created_at?: string
+          price_cents: number
+          slot_id: string
+          source?: 'schedule' | 'manual'
+          status?: 'active' | 'voided'
+          voided_at?: string | null
+          voided_reason?: string | null
+        }
+        Update: {
+          billing_mode?: 'auto' | 'custom'
+          created_at?: string
+          price_cents?: number
+          slot_id?: string
+          source?: 'schedule' | 'manual'
+          status?: 'active' | 'voided'
+          voided_at?: string | null
+          voided_reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pt_sessions_slot_id_fkey"
+            columns: ["slot_id"]
+            isOneToOne: true
+            referencedRelation: "slots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pt_settings: {
+        Row: {
+          id: boolean
+          low_balance_threshold_cents: number
+          max_participants: number
+          full_session_min: number
+          session_price_cents: number
+          updated_at: string
+        }
+        Insert: {
+          id?: boolean
+          low_balance_threshold_cents?: number
+          max_participants?: number
+          full_session_min?: number
+          session_price_cents?: number
+          updated_at?: string
+        }
+        Update: {
+          id?: boolean
+          low_balance_threshold_cents?: number
+          max_participants?: number
+          full_session_min?: number
+          session_price_cents?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      pt_trainers: {
+        Row: {
+          created_at: string | null
+          email: string
+          id: string
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          id?: string
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      pt_wallet_entries: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          created_by_name: string | null
+          description: string
+          details: Json
+          id: string
+          kind: 'topup' | 'manual' | 'charge' | 'adjustment'
+          session_date: string | null
+          session_start: string | null
+          slot_id: string | null
+          user_id: string
+        }
+        Insert: {
+          amount_cents: number
+          created_at?: string
+          created_by_name?: string | null
+          description: string
+          details?: Json
+          id?: string
+          kind: 'topup' | 'manual' | 'charge' | 'adjustment'
+          session_date?: string | null
+          session_start?: string | null
+          slot_id?: string | null
+          user_id: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          created_by_name?: string | null
+          description?: string
+          details?: Json
+          id?: string
+          kind?: 'topup' | 'manual' | 'charge' | 'adjustment'
+          session_date?: string | null
+          session_start?: string | null
+          slot_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pt_wallet_entries_slot_id_fkey"
+            columns: ["slot_id"]
+            isOneToOne: false
+            referencedRelation: "slots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       slots: {
         Row: {
           created_at: string | null
@@ -120,6 +340,7 @@ export type Database = {
           min_capacity: number
           space_id: string
           start_time: string
+          updated_at: string
         }
         Insert: {
           created_at?: string | null
@@ -159,12 +380,14 @@ export type Database = {
           day_of_week: number
           end_time: string
           id: string
+          is_pt: boolean
           space_id: string
           start_time: string
         }
         Insert: {
           created_at?: string | null
           day_of_week: number
+          is_pt?: boolean
           end_time: string
           id?: string
           space_id: string
@@ -175,6 +398,7 @@ export type Database = {
           day_of_week?: number
           end_time?: string
           id?: string
+          is_pt?: boolean
           space_id?: string
           start_time?: string
         }
@@ -243,6 +467,125 @@ export type Database = {
       generate_slots: { Args: { days_ahead?: number }; Returns: undefined }
       is_admin: { Args: never; Returns: boolean }
       is_italian_holiday: { Args: { d: string }; Returns: boolean }
+      is_trainer: { Args: never; Returns: boolean }
+      pt_my_status: {
+        Args: never
+        Returns: {
+          is_member: boolean
+          valid_from: string | null
+          valid_to: string | null
+          ever_member: boolean
+          balance_cents: number
+          low_balance_threshold_cents: number
+          session_price_cents: number
+          max_participants: number
+        }[]
+      }
+      pt_day_preview: {
+        Args: { d: string }
+        Returns: {
+          slot_id: string
+          status: 'active' | 'voided'
+          presences: number
+          mode: PtMode
+          unit_cents: number | null
+          my_cents: number | null
+          members: number
+          next_unit_cents: number | null
+          day_closed: boolean
+        }[]
+      }
+      pt_trainer_sessions: {
+        Args: { from_date: string; to_date: string }
+        Returns: {
+          slot_id: string
+          date: string
+          start_time: string
+          end_time: string
+          space_name: string
+          status: 'active' | 'voided'
+          participants: { name: string; avatar_url: string | null }[]
+        }[]
+      }
+      admin_list_users: {
+        Args: never
+        Returns: {
+          user_id: string
+          email: string
+          full_name: string | null
+          avatar_url: string | null
+          last_sign_in_at: string | null
+          is_admin: boolean
+          is_trainer: boolean
+          pt_active: boolean
+          pt_valid_from: string | null
+          pt_valid_to: string | null
+          balance_cents: number
+        }[]
+      }
+      pt_save_membership: {
+        Args: { membership_id: string | null; user_id: string; valid_from: string; valid_to: string | null }
+        Returns: string
+      }
+      pt_delete_membership: { Args: { membership_id: string }; Returns: undefined }
+      pt_add_wallet_entry: {
+        Args: { user_id: string; amount_cents: number; kind: 'topup' | 'manual'; note: string }
+        Returns: string
+      }
+      pt_void_session: { Args: { slot_id: string; reason: string }; Returns: undefined }
+      pt_restore_session: { Args: { slot_id: string }; Returns: undefined }
+      pt_create_session: { Args: { slot_id: string }; Returns: undefined }
+      pt_set_exclusion: {
+        Args: { slot_id: string; user_id: string; excluded: boolean; reason: string | null }
+        Returns: undefined
+      }
+      pt_set_payers: { Args: { slot_id: string; user_ids: string[]; reason: string | null }; Returns: undefined }
+      pt_update_settings: {
+        Args: { session_price_cents: number; low_balance_threshold_cents: number; max_participants: number }
+        Returns: undefined
+      }
+      pt_sync_schedule: { Args: { space_id: string }; Returns: number }
+      pt_admin_sessions: {
+        Args: { from_date: string; to_date: string }
+        Returns: {
+          slot_id: string
+          space_id: string
+          space_name: string
+          date: string
+          start_time: string
+          end_time: string
+          status: 'active' | 'voided'
+          source: 'schedule' | 'manual'
+          billing_mode: 'auto' | 'custom'
+          price_cents: number
+          voided_reason: string | null
+          day_closed: boolean
+          mode: PtMode
+          participants: {
+            user_id: string
+            name: string
+            email: string
+            avatar_url: string | null
+            excluded: boolean
+            counted: boolean
+          }[]
+          exclusions: { user_id: string; name: string; reason: string | null }[]
+          payers: { user_id: string; name: string }[]
+          charges: { user_id: string; name: string; amount_cents: number }[]
+          total_cents: number
+        }[]
+      }
+      pt_low_balances: {
+        Args: never
+        Returns: {
+          user_id: string
+          email: string
+          full_name: string | null
+          avatar_url: string | null
+          balance_cents: number
+          pt_active: boolean
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

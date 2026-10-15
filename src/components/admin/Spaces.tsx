@@ -27,6 +27,7 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog"
+import { useSyncPtSchedule } from "@/hooks/usePtAdmin"
 import { DayPicker } from "./DayPicker"
 import { TimeSlotEditor } from "./TimeSlotEditor"
 import { WeeklySchedulePreview } from "./WeeklySchedulePreview"
@@ -221,6 +222,7 @@ function SpaceCard({
   const updateConfig = useUpdateSpaceConfig()
   const regenerateSlots = useRegenerateSlots()
   const deleteSpace = useDeleteSpace()
+  const syncPt = useSyncPtSchedule()
 
   const handleToggle = () => {
     if (!expanded) setDraft(initDraft(space))
@@ -253,7 +255,10 @@ function SpaceCard({
         allow_multiple_bookings: draft.allow_multiple_bookings,
       })
       await regenerateSlots.mutateAsync(14)
-      toast.success("Configurazione salvata.")
+      const changed = await syncPt.mutateAsync(space.id)
+      toast.success("Configurazione salvata.", changed > 0
+        ? { description: changed === 1 ? "1 seduta PT aggiornata" : `${changed} sedute PT aggiornate` }
+        : undefined)
       setExpanded(false)
     } catch (err) {
       toast.error((err as Error).message || "Errore durante il salvataggio.")
@@ -275,13 +280,14 @@ function SpaceCard({
       ? "Nessun giorno"
       : space.available_days.map(d => DAY_LABELS[d]).join(" · ")
 
-  const isPending = updateConfig.isPending || regenerateSlots.isPending
+  const isPending = updateConfig.isPending || regenerateSlots.isPending || syncPt.isPending
 
   const handleToggleActive = async (e: React.MouseEvent) => {
     e.stopPropagation()
     try {
       await updateConfig.mutateAsync({ id: space.id, is_active: !space.is_active })
       await regenerateSlots.mutateAsync(14)
+      await syncPt.mutateAsync(space.id)
     } catch (err) {
       toast.error((err as Error).message || "Errore durante l'aggiornamento.")
     }

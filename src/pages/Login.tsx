@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/hooks/useAuth'
 import { GoogleIcon } from '@/components/icons/GoogleIcon'
+import { DevLogin } from '@/components/DevLogin'
 
 export function Login() {
   const { session, loading, signIn, signInWithMagicLink } = useAuth()
@@ -193,6 +194,7 @@ export function Login() {
             </>
           )}
         </div>
+        {import.meta.env.VITE_DEV_LOGIN === 'true' && <DevLogin />}
         <LegalLinks />
       </div>
     </div>

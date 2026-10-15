@@ -54,7 +54,12 @@ export function SpaceBookingView() {
   }, [myBookings, dateStr, slots])
 
   const allowMultipleBookings = space?.allow_multiple_bookings ?? false
-  const hasBookingForDay = !allowMultipleBookings && bookedSlotIds.length > 0
+  // PT sessions are independent of the one-booking-per-day rule: they neither consume it nor are blocked by it.
+  const regularBookedCount = useMemo(() => {
+    const ptSlotIds = new Set(slots?.filter(s => s.pt_status === 'active').map(s => s.id) ?? [])
+    return bookedSlotIds.filter(id => !ptSlotIds.has(id)).length
+  }, [bookedSlotIds, slots])
+  const hasBookingForDay = !allowMultipleBookings && regularBookedCount > 0
 
   const handleBook = async (slotId: string) => {
     await createBooking.mutateAsync({

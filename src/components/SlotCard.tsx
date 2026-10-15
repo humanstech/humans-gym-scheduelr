@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Users, AlertTriangle, XCircle, Lock } from 'lucide-react'
+import { Users, AlertTriangle, XCircle, Lock, Dumbbell, Info } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -7,6 +7,8 @@ import { Avatar, AvatarFallback, AvatarImage, AvatarGroup, AvatarGroupCount } fr
 import { cn } from '@/lib/utils'
 import type { SlotWithCount } from '@/hooks/useSlots'
 import { useDeleteBooking } from '@/hooks/useBookings'
+import { isPtMemberOn, useDayPreview, usePtStatus, type PtDayPreview } from '@/hooks/usePersonalTrainer'
+import { formatEUR } from '@/lib/money'
 
 interface SlotCardProps {
   slot: SlotWithCount
@@ -63,10 +65,83 @@ function BookerPile({ bookers }: { bookers: { name: string; avatarUrl?: string }
   )
 }
 
+function bookingErrorMessage(err: unknown) {
+  const message = (err as { message?: string } | null)?.message ?? ''
+  if (message.includes('PT membership required')) {
+    return 'Questa seduta è riservata agli iscritti al Personal Trainer'
+  }
+  if (message.includes('Slot full')) return 'Lo slot è completo.'
+  return 'Errore durante la prenotazione. Riprova.'
+}
+
+const FULL_SESSION_MIN = 3
+
+/** One or two short, neutral lines about the estimated PT quota. */
+function ptQuotaLines(p: PtDayPreview, isBooked: boolean): string[] {
+  if (p.day_closed) return ['Giornata chiusa: vedi il wallet']
+  if (p.mode === 'custom') {
+    if (!isBooked) return ['Seduta a carico dei paganti scelti dall\'admin']
+    return p.my_cents
+      ? [`Quota stimata: ${formatEUR(p.my_cents)} · seduta a carico dei paganti scelti`]
+      : ['Seduta a carico di altri: per te nessuna quota']
+  }
+
+  const lines: string[] = []
+  if (isBooked && p.my_cents != null) {
+    const how = p.mode === 'shared'
+      ? ' · quota condivisa tra tutti gli iscritti PT'
+      : p.mode === 'pooled' ? ' · divisa tra le presenze del giorno' : ''
+    lines.push(p.my_cents === 0 ? 'Per ora nessuna quota per questa seduta' : `Quota stimata: ${formatEUR(p.my_cents)}${how}`)
+  }
+  if (p.presences < FULL_SESSION_MIN && p.next_unit_cents != null) {
+    const next = formatEUR(p.next_unit_cents)
+    if (isBooked) {
+      const who = p.presences <= 1 ? 'Sei da solo' : `Siete in ${p.presences}`
+      lines.push(`${who}: con un'altra persona la quota sarebbe ${next} a testa, altrimenti si divide tra tutti gli iscritti PT.`)
+    } else if (p.presences === 0) {
+      lines.push(`Ancora nessun iscritto: prenotando, la quota stimata sarebbe ${next}.`)
+    } else {
+      const who = p.presences === 1 ? 'C\'è 1 iscritto' : `Ci sono ${p.presences} iscritti`
+      lines.push(`${who}: prenotando, la quota sarebbe ${next} a testa.`)
+    }
+  }
+  return lines
+}
+
+function PtQuotaInfo({ preview, isBooked }: { preview: PtDayPreview | undefined; isBooked: boolean }) {
+  if (!preview) return null
+  const lines = ptQuotaLines(preview, isBooked)
+  if (lines.length === 0) return null
+  return (
+    <div className="mt-3 flex items-start gap-1.5 text-xs text-muted-foreground">
+      <Info className="mt-px h-3.5 w-3.5 shrink-0" />
+      <div className="space-y-0.5">
+        {lines.map(line => <p key={line}>{line}</p>)}
+      </div>
+    </div>
+  )
+}
+
+function PtBadge() {
+  return (
+    <Badge className="shrink-0 bg-violet-500/10 text-violet-700 dark:text-violet-300">
+      <Dumbbell />
+      Personal trainer
+    </Badge>
+  )
+}
+
 export function SlotCard({ slot, isBooked, bookingId, hasBookingForDay, onBook, isAnyBookingPending }: SlotCardProps) {
-  const available = slot.max_capacity - slot.booking_count
+  const isPt = slot.pt_status === 'active'
+  const { data: ptStatus } = usePtStatus()
+  const isPtMember = isPtMemberOn(ptStatus, slot.date)
+  const { data: dayPreview } = useDayPreview(slot.date, isPt && isPtMember)
+
+  const capacity = isPt ? (ptStatus?.max_participants ?? slot.max_capacity) : slot.max_capacity
+  const available = capacity - slot.booking_count
   const isFull = available <= 0
-  const isUnderMin = slot.booking_count < slot.min_capacity
+  const isUnderMin = !isPt && slot.booking_count < slot.min_capacity
+  const blockedByDailyBooking = !isPt && hasBookingForDay
 
   const slotStart = new Date(`${slot.date}T${slot.start_time}`)
   const [now, setNow] = useState(() => Date.now())
@@ -81,8 +156,8 @@ export function SlotCard({ slot, isBooked, bookingId, hasBookingForDay, onBook, 
     try {
       await onBook(slot.id)
       toast.success('Prenotazione confermata!')
-    } catch {
-      toast.error('Errore durante la prenotazione. Riprova.')
+    } catch (err) {
+      toast.error(bookingErrorMessage(err))
     }
   }
 
@@ -116,10 +191,34 @@ export function SlotCard({ slot, isBooked, bookingId, hasBookingForDay, onBook, 
     )
   }
 
+  // PT session, user not a member that day → locked
+  if (isPt && !isPtMember && !isBooked) {
+    return (
+      <div className="rounded-lg border border-dashed bg-muted/40 p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-xl font-bold tracking-tight leading-none text-muted-foreground">
+              {formatTime(slot.start_time)} – {formatTime(slot.end_time)}
+            </p>
+            <p className="mt-1.5 text-xs text-muted-foreground flex items-center gap-1">
+              <Lock className="h-3 w-3 shrink-0" />
+              Riservato agli iscritti al Personal Trainer
+            </p>
+          </div>
+          <Badge className="shrink-0 bg-violet-500/10 text-violet-700 dark:text-violet-300">
+            <Dumbbell />
+            Riservato PT
+          </Badge>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
       className={cn(
         'rounded-lg border bg-card p-4 transition-colors',
+        isPt && !isBooked && 'border-violet-500/30',
         isBooked && 'border-primary/30 bg-primary/5',
         isFull && !isBooked && 'opacity-60'
       )}
@@ -140,7 +239,7 @@ export function SlotCard({ slot, isBooked, bookingId, hasBookingForDay, onBook, 
             </Badge>
           ) : isFull ? (
             <Badge variant="secondary">Completo</Badge>
-          ) : hasBookingForDay ? (
+          ) : blockedByDailyBooking ? (
             <Badge variant="secondary" className="text-[11px]">Hai già uno slot</Badge>
           ) : (
             <Button size="sm" onClick={handleBook} disabled={isAnyBookingPending}>
@@ -151,17 +250,23 @@ export function SlotCard({ slot, isBooked, bookingId, hasBookingForDay, onBook, 
       </div>
 
       {/* Row 2: meta */}
-      <div className="mt-1.5 flex items-center gap-3 text-xs text-muted-foreground">
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+        {isPt && <PtBadge />}
+        {slot.pt_status === 'voided' && slotStart.getTime() > now && (
+          <Badge variant="outline" className="shrink-0 text-muted-foreground">PT annullato · aperto a tutti</Badge>
+        )}
         {slot.space_name && <span>{slot.space_name}</span>}
         <span>+15 min uscita</span>
         <span className="flex items-center gap-1">
           <Users className="h-3 w-3" />
-          {slot.booking_count}/{slot.max_capacity} posti
+          {slot.booking_count}/{capacity} posti
         </span>
       </div>
 
       {/* Bookers */}
       <BookerPile bookers={slot.bookers} />
+
+      {isPt && isPtMember && <PtQuotaInfo preview={dayPreview?.[slot.id]} isBooked={isBooked} />}
 
       {/* Cancel button — own row when booked */}
       {isBooked && (

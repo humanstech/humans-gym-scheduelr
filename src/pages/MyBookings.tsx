@@ -1,11 +1,12 @@
 import { useMemo } from 'react'
 import { format, parseISO } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { Calendar, Clock, Trash2 } from 'lucide-react'
+import { Calendar, Clock, Dumbbell, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useMyBookings, useDeleteBooking } from '@/hooks/useBookings'
+import { useMyBookings, useDeleteBooking, isPtBooking } from '@/hooks/useBookings'
 import { useActiveSpaces } from '@/hooks/useActiveSpaces'
 import type { Booking } from '@/hooks/useBookings'
 
@@ -34,11 +35,17 @@ function BookingRow({
           <p className="font-medium">
             {date ? format(date, 'EEEE d MMMM', { locale: it }) : 'Data sconosciuta'}
           </p>
-          <div className="mt-0.5 flex items-center gap-1.5 text-sm text-muted-foreground">
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
             <Clock className="h-3.5 w-3.5" />
             {booking.slots
               ? `${booking.slots.start_time.slice(0, 5)} – ${booking.slots.end_time.slice(0, 5)}`
               : '—'}
+            {isPtBooking(booking) && (
+              <Badge className="ml-1 bg-violet-500/10 text-violet-700 dark:text-violet-300">
+                <Dumbbell />
+                Personal trainer
+              </Badge>
+            )}
           </div>
         </div>
       </div>

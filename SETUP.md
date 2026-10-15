@@ -12,17 +12,52 @@ npm ci
 bash scripts/local.sh up
 ```
 
-Il comando genera `.env.stack.local` se manca, avvia il backend, applica le
-migrazioni una sola volta, inserisce il seed e costruisce il frontend.
+Il comando genera `.env.stack.local` se manca (a un file esistente aggiunge solo
+le chiavi mancanti `DEV_LOGIN_PASSWORD` e `ADDITIONAL_REDIRECT_URLS`, senza
+rigenerare i segreti), avvia il backend, applica le migrazioni una sola volta,
+inserisce il seed, costruisce il frontend e crea gli utenti di prova.
 
 - App compilata: http://localhost:8080
 - API: http://localhost:8080
 - Email locali (Mailpit): http://localhost:8025
 
-In locale Google è disabilitato. Per accedere, aprire **Sei un ospite?**, inserire
-`marco.ciotoli@humans.tech` e aprire il magic link ricevuto in Mailpit. Questo
-account è amministratore nel seed. Sono ammessi gli indirizzi `@humans.tech`.
-Il provider Google va configurato esplicitamente in produzione.
+### Accesso rapido (nessuna email)
+
+La build locale mostra sotto il login il riquadro **Accesso rapido · solo
+ambiente locale**: un clic entra con uno dei profili, con la password casuale
+`DEV_LOGIN_PASSWORD` di `.env.stack.local`. Per cambiare profilo, uscire e
+sceglierne un altro.
+
+| Profilo | Email | Ruolo |
+|---|---|---|
+| Marco Ciotoli | `ADMIN_EMAIL` (`marco.ciotoli@humans.tech`) | Admin + PT |
+| Anna Rossi | `anna.rossi@humans.tech` | Iscritta PT |
+| Luca Bianchi | `luca.bianchi@humans.tech` | Iscritto PT |
+| Sara Verdi | `sara.verdi@humans.tech` | Iscritta PT |
+| Giulia Neri | `giulia.neri@humans.tech` | Utente senza PT |
+| Paolo Trainer | `trainer.pt@example.com` | Trainer |
+
+Per ricreare utenti e dati di prova (idempotente, anche su un DB già avviato):
+
+```bash
+bash scripts/local.sh dev-users
+```
+
+Esegue `supabase/dev/00_*.sql`, crea o aggiorna gli utenti tramite l'API admin
+di GoTrue (email già confermata) e poi esegue gli altri `supabase/dev/*.sql` in
+ordine. Uno script che fallisce, ad esempio perché le tabelle PT non esistono
+ancora, viene segnalato e saltato; lo stesso vale per l'utente trainer. Rifiuta
+di girare se `SUPABASE_PUBLIC_URL`/`SITE_URL` non sono localhost.
+
+Il riquadro esiste solo con `VITE_DEV_LOGIN=true`, impostato esclusivamente da
+`deploy/local.yml`: la build fallisce se il flag è attivo con un URL Supabase
+non localhost, e nelle altre build il codice viene eliminato. `deploy/local.yml`
+fissa inoltre l'SMTP su Mailpit, quindi lo stack locale non può usare Resend.
+
+In alternativa (fallback) resta il magic link: inserire l'email nel form e
+aprire il messaggio in Mailpit. In locale Google è disabilitato; il provider va
+configurato esplicitamente in produzione. Sono ammessi gli indirizzi
+`@humans.tech`.
 
 La configurazione e i dati locali sono separati dalla produzione. `down` ferma
 lo stack mantenendo i volumi:
@@ -37,16 +72,21 @@ Fermare il vecchio stack prima di avviare il nuovo, per liberare le porte.
 
 ## Sviluppo con Vite
 
-Copiare `.env.example` in `.env.local` e impostare `VITE_SUPABASE_URL` a
-`http://localhost:8080`. Copiare **solo** il valore `ANON_KEY` da `.env.stack.local`
-in `VITE_SUPABASE_ANON_KEY`. Non usare `SERVICE_ROLE_KEY`.
+Con lo stack avviato:
 
 ```bash
-npm run dev
+bash scripts/local.sh dev-env   # scrive .env.local (ignorato da git)
+npm run dev                     # http://localhost:5173
 ```
 
-L'ambiente locale generato consente il callback sia su `localhost:8080` che su
-`localhost:5173`. I test browser usano la build Docker sulla porta 8080.
+`.env.local` contiene solo URL locale, `ANON_KEY`, `VITE_DEV_LOGIN=true` e la
+password locale; le altre righe già presenti vengono mantenute. Non contiene mai
+`SERVICE_ROLE_KEY`. L'ambiente locale consente il callback sia su
+`localhost:8080` che su `localhost:5173`. I test browser usano la build Docker
+sulla porta 8080.
+
+`scripts/bundle.py --development` usa `.env.stack.local` e rifiuta backend non
+localhost: un'immagine di sviluppo non può puntare alla produzione.
 
 ## Test
 

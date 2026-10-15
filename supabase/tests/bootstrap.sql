@@ -6,7 +6,9 @@ CREATE SCHEMA auth;
 CREATE TABLE auth.users (
   id uuid PRIMARY KEY,
   email text NOT NULL,
-  raw_user_meta_data jsonb DEFAULT '{}'
+  raw_user_meta_data jsonb DEFAULT '{}',
+  last_sign_in_at timestamptz,
+  created_at timestamptz DEFAULT now()
 );
 CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
   SELECT coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb;
