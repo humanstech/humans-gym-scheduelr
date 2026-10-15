@@ -6,7 +6,7 @@ import subprocess
 import unittest
 import uuid
 
-CONTAINER = os.environ['SLOKTA_TEST_CONTAINER']
+CONTAINER = os.environ['GYM_TEST_CONTAINER']
 
 
 def sql(statement, user=None, ok=True):

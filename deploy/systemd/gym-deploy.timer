@@ -5,7 +5,7 @@ Description=Check main every two minutes
 OnBootSec=2min
 OnUnitInactiveSec=2min
 RandomizedDelaySec=15
-Unit=slokta-deploy.service
+Unit=gym-deploy.service
 
 [Install]
 WantedBy=timers.target

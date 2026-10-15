@@ -1,4 +1,7 @@
-# Humans Gym / Slokta
+# Gym
+
+Gym è l’app di prenotazione dell’ecosistema **humans.tech**, con dominio
+di produzione **https://gym.humans.tech**.
 
 Prenotazione degli spazi aziendali: React, TypeScript e Vite; backend Supabase
 self-hosted su EC2 (PostgreSQL, Auth, PostgREST, Realtime e pg_cron).

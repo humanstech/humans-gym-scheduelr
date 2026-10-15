@@ -24,4 +24,4 @@ apt-get update
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 systemctl enable --now docker
 bash "$(dirname "$0")/install-services.sh"
-echo 'Host ready. Next: generate /etc/slokta/production.env and follow docs/PRODUCTION.md.'
+echo 'Host ready. Next: generate /etc/gym/production.env and follow docs/PRODUCTION.md.'

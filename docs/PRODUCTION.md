@@ -89,7 +89,7 @@ delle versioni non correnti). Associare al ruolo EC2 la policy
 Il prefisso previsto è `gym/`. Non servono access key AWS salvate nei file.
 
 Il backup comprende database e account Auth. Conservare separatamente una copia
-cifrata di `/etc/slokta/production.env` in un secret manager/archivio aziendale:
+cifrata di `/etc/gym/production.env` in un secret manager/archivio aziendale:
 contiene chiavi JWT e credenziali necessarie al ripristino. Non salvarla nel repo.
 
 ## 4. Preparare la macchina
@@ -100,8 +100,8 @@ Eseguire sulla EC2, dopo aver portato questa implementazione su `main`:
 git clone --branch main https://github.com/humanstech/humans-gym-scheduelr.git
 cd humans-gym-scheduelr
 sudo bash scripts/bootstrap-ec2.sh
-sudo python3 scripts/make-env.py --output /etc/slokta/production.env
-sudoedit /etc/slokta/production.env
+sudo python3 scripts/make-env.py --output /etc/gym/production.env
+sudoedit /etc/gym/production.env
 ```
 
 L'installer prepara Docker, Compose, AWS CLI e servizi systemd, ma non li abilita.
@@ -148,9 +148,9 @@ Il commit corrente di `main` deve avere una CI verde. DNS, Google, SMTP e S3 dev
 essere configurati prima di procedere.
 
 ```bash
-sudo python3 /opt/slokta/tools/production.py bootstrap
-sudo python3 /opt/slokta/tools/production.py status
-sudo python3 /opt/slokta/tools/production.py backup
+sudo python3 /opt/gym/tools/production.py bootstrap
+sudo python3 /opt/gym/tools/production.py status
+sudo python3 /opt/gym/tools/production.py backup
 ```
 
 Il bootstrap installa lo schema vuoto, crea l'amministratore nella lista di
@@ -164,8 +164,8 @@ avvenuto: attendere la CI e ripetere. Verificare che `status` riporti uno SHA e
 che login, prenotazione e cancellazione funzionino prima di abilitare i timer:
 
 ```bash
-sudo systemctl enable --now slokta-deploy.timer slokta-backup.timer
-systemctl list-timers 'slokta-*'
+sudo systemctl enable --now gym-deploy.timer gym-backup.timer
+systemctl list-timers 'gym-*'
 ```
 
 ## 7. Rilasci successivi e diagnostica
@@ -175,18 +175,18 @@ Push su `develop`, CI verde, PR e merge su `main`. Nessun comando sulla macchina
 locale e caricato su S3; un errore nel backup interrompe il deploy.
 
 ```bash
-sudo python3 /opt/slokta/tools/production.py status
-sudo journalctl -u slokta-deploy.service -n 100 --no-pager
-sudo journalctl -u slokta-backup.service -n 100 --no-pager
-sudo python3 /opt/slokta/tools/production.py retry
+sudo python3 /opt/gym/tools/production.py status
+sudo journalctl -u gym-deploy.service -n 100 --no-pager
+sudo journalctl -u gym-backup.service -n 100 --no-pager
+sudo python3 /opt/gym/tools/production.py retry
 ```
 
 Per usare Compose sulla release attiva, preservare lo SHA dell'immagine:
 
 ```bash
-cd /opt/slokta/current
-release_sha=$(basename "$(readlink -f /opt/slokta/current)")
-sudo python3 scripts/stack.py compose --env-file /etc/slokta/production.env \
+cd /opt/gym/current
+release_sha=$(basename "$(readlink -f /opt/gym/current)")
+sudo python3 scripts/stack.py compose --env-file /etc/gym/production.env \
   --sha "$release_sha" -- ps
 ```
 
@@ -198,12 +198,12 @@ I log Docker ruotano automaticamente (3 file da 10 MB per servizio).
 Controllare i job SQL via SSM/Compose:
 
 ```bash
-sudo python3 scripts/stack.py compose --env-file /etc/slokta/production.env \
+sudo python3 scripts/stack.py compose --env-file /etc/gym/production.env \
   --sha "$release_sha" -- exec -T db psql -U postgres -d postgres -c \
   "SELECT jobname,schedule,active FROM cron.job"
 ```
 
-`slokta-generate-slots` gira alle 03:00 UTC; `slokta-cancel-underfilled` ogni minuto.
+`gym-generate-slots` gira alle 03:00 UTC; `gym-cancel-underfilled` ogni minuto.
 Date e soglia di 15 minuti sono calcolate in `Europe/Rome` nel database, inclusa
 l'ora legale. Controllare gli errori recenti in `cron.job_run_details`.
 
@@ -222,17 +222,17 @@ Non resettare/forzare il branch e non modificare a mano i file nella release.
 In emergenza fermare il timer prima di intervenire:
 
 ```bash
-sudo systemctl stop slokta-deploy.timer
+sudo systemctl stop gym-deploy.timer
 ```
 
 Per recuperare un deploy fermato da timeout, verificare i container e il journal,
 poi usare `retry`: accetta comunque solo il main corrente con CI verde. Riabilitare
 il timer quando lo stato è coerente. Lo stop del timer non ferma un deploy già in
-corso: attendere che `slokta-deploy.service` termini prima di fare manutenzione.
+corso: attendere che `gym-deploy.service` termini prima di fare manutenzione.
 
 ## 9. Backup e ripristino
 
-I dump sono in `/opt/slokta/backups/`, permessi privati, e sul prefisso S3.
+I dump sono in `/opt/gym/backups/`, permessi privati, e sul prefisso S3.
 Il backup giornaliero rimuove i dump locali più vecchi di 7 giorni; il lifecycle
 S3 gestisce la retention remota. Conservare le ultime release/immagini per il
 rollback e rimuovere periodicamente quelle obsolete, senza cancellare volumi.
@@ -255,9 +255,9 @@ Esempio sulla macchina di ripristino, dalla directory della release del backup:
 
 ```bash
 # Definire il percorso del dump scaricato da S3.
-backup_file=/opt/slokta/backups/backup-DA-RIPRISTINARE.dump
-compose=(sudo docker compose --project-name slokta \
-  --env-file /etc/slokta/production.env -f deploy/compose.yml)
+backup_file=/opt/gym/backups/backup-DA-RIPRISTINARE.dump
+compose=(sudo docker compose --project-name gym \
+  --env-file /etc/gym/production.env -f deploy/compose.yml)
 "${compose[@]}" up -d --wait db auth rest realtime
 "${compose[@]}" stop auth rest realtime
 "${compose[@]}" exec -T db pg_restore --list < "$backup_file"

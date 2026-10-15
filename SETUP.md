@@ -31,6 +31,10 @@ lo stack mantenendo i volumi:
 bash scripts/local.sh down
 ```
 
+Lo stack locale ora usa il progetto Compose `gym-local`. Eventuali volumi del
+precedente progetto `slokta-local` restano separati e non vengono eliminati.
+Fermare il vecchio stack prima di avviare il nuovo, per liberare le porte.
+
 ## Sviluppo con Vite
 
 Copiare `.env.example` in `.env.local` e impostare `VITE_SUPABASE_URL` a

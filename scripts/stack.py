@@ -28,7 +28,7 @@ def run(args, **kwargs):
 
 
 class Stack:
-    def __init__(self, release, env_file, project='slokta', sha='local'):
+    def __init__(self, release, env_file, project='gym', sha='local'):
         self.release = Path(release).resolve()
         self.env_file = Path(env_file).resolve()
         self.env = read_env(self.env_file)
@@ -106,10 +106,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['migrate', 'seed', 'backup', 'compose'])
     parser.add_argument('--env-file', required=True)
-    parser.add_argument('--project', default='slokta')
+    parser.add_argument('--project', default='gym')
     parser.add_argument('--sha', default='local')
     parser.add_argument('--release', default=str(Path(__file__).resolve().parents[1]))
-    parser.add_argument('--backup-dir', default='/opt/slokta/backups')
+    parser.add_argument('--backup-dir', default='/opt/gym/backups')
     args, extra = parser.parse_known_args()
     stack = Stack(args.release, args.env_file, args.project, args.sha)
     try:

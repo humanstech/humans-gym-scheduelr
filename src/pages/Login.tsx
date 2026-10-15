@@ -62,7 +62,7 @@ export function Login() {
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground text-3xl font-black">
             S
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">Slokta</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Gym</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Prenota spazi aziendali
           </p>

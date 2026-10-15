@@ -30,7 +30,7 @@ def ci_passed(response, sha, repository):
 
 
 def request_json(url, token=None):
-    headers = {'Accept': 'application/json', 'User-Agent': 'slokta-deployer'}
+    headers = {'Accept': 'application/json', 'User-Agent': 'gym-deployer'}
     if token:
         headers['Authorization'] = f'Bearer {token}'
     with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=20) as response:
@@ -203,8 +203,8 @@ def exclusive_lock(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['bootstrap', 'poll', 'retry', 'backup', 'status'])
-    parser.add_argument('--root', default='/opt/slokta')
-    parser.add_argument('--env-file', default='/etc/slokta/production.env')
+    parser.add_argument('--root', default='/opt/gym')
+    parser.add_argument('--env-file', default='/etc/gym/production.env')
     args = parser.parse_args()
     production = Production(args.root, args.env_file)
     production.root.mkdir(parents=True, exist_ok=True)

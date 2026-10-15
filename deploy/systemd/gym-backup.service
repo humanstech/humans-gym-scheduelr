@@ -1,10 +1,10 @@
 [Unit]
-Description=Back up Humans Gym PostgreSQL to S3
+Description=Back up Gym PostgreSQL to S3
 After=network-online.target docker.service
 Requires=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 /opt/slokta/tools/production.py backup
+ExecStart=/usr/bin/python3 /opt/gym/tools/production.py backup
 TimeoutStartSec=30min
 UMask=0077

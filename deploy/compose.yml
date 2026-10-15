@@ -1,4 +1,4 @@
-name: slokta
+name: gym
 
 x-service: &service
   restart: unless-stopped
@@ -63,7 +63,7 @@ services:
       GOTRUE_SMTP_PORT: ${SMTP_PORT:-587}
       GOTRUE_SMTP_USER: ${SMTP_USER:-}
       GOTRUE_SMTP_PASS: ${SMTP_PASS:-}
-      GOTRUE_SMTP_SENDER_NAME: Humans Gym
+      GOTRUE_SMTP_SENDER_NAME: Gym
       GOTRUE_RATE_LIMIT_EMAIL_SENT: ${SMTP_RATE_LIMIT_EMAIL_SENT:-30}
       GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
       GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
@@ -96,7 +96,7 @@ services:
   realtime:
     <<: *service
     image: supabase/realtime:v2.134.10
-    container_name: realtime-dev.${COMPOSE_PROJECT_NAME:-slokta}-realtime
+    container_name: realtime-dev.${COMPOSE_PROJECT_NAME:-gym}-realtime
     networks:
       default:
         aliases: [realtime-dev.realtime]
@@ -145,8 +145,8 @@ services:
       SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
     volumes:
       - ./kong.yml:/etc/kong/template.yml:ro
-      - ./kong-entrypoint.sh:/slokta-entrypoint.sh:ro
-    entrypoint: [sh, /slokta-entrypoint.sh]
+      - ./kong-entrypoint.sh:/gym-entrypoint.sh:ro
+    entrypoint: [sh, /gym-entrypoint.sh]
     healthcheck:
       test: [CMD, kong, health]
       interval: 5s
@@ -155,7 +155,7 @@ services:
 
   web:
     <<: *service
-    image: slokta-web:${RELEASE_SHA:-local}
+    image: gym-web:${RELEASE_SHA:-local}
     build:
       context: ..
       args:

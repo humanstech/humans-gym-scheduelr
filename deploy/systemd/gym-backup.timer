@@ -1,11 +1,11 @@
 [Unit]
-Description=Daily Humans Gym backup
+Description=Daily Gym backup
 
 [Timer]
 OnCalendar=*-*-* 02:00:00 UTC
 Persistent=true
 RandomizedDelaySec=300
-Unit=slokta-backup.service
+Unit=gym-backup.service
 
 [Install]
 WantedBy=timers.target

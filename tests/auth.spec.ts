@@ -7,7 +7,7 @@ test.describe('Anonymous access', () => {
     test(`${route} requires login`, async ({ page }) => {
       await page.goto(route)
       await expect(page).toHaveURL(/\/login$/)
-      await expect(page.getByRole('heading', { name: 'Slokta' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Gym' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Accedi con Google' })).toBeVisible()
     })
   }

@@ -48,7 +48,7 @@ export function Layout({ children }: LayoutProps) {
               <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground text-sm font-black">
                 S
               </div>
-              <span>Slokta</span>
+              <span>Gym</span>
             </Link>
             <nav className="hidden items-center gap-1 sm:flex">
               {navLinks.map(({ to, label, icon: Icon }) => (
