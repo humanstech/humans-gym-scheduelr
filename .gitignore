@@ -16,6 +16,13 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+.env.*
+!.env.example
+!deploy/production.env.example
+*.dump
+__pycache__/
+*.pyc
+deploy/ext-backend.pem
 
 # Editor directories and files
 .vscode/*
@@ -33,3 +40,8 @@ dist-ssr
 tests/.auth/
 test-results/
 playwright-report/
+
+# Deployment credentials and local release bundles
+*.pem
+*.key
+bundles/

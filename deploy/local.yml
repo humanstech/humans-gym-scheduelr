@@ -1,0 +1,21 @@
+# Optional local mailbox; never enabled by production.py.
+services:
+  auth:
+    environment:
+      GOTRUE_RATE_LIMIT_EMAIL_SENT: 1000
+      GOTRUE_SMTP_MAX_FREQUENCY: 1s
+  mailpit:
+    restart: unless-stopped
+    platform: linux/arm64
+    mem_limit: 64m
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+    healthcheck:
+      test: [CMD, /mailpit, readyz]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    image: axllent/mailpit:v1.30.2
+    ports:
+      - 127.0.0.1:8025:8025

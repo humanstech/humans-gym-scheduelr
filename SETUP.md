@@ -1,111 +1,86 @@
-# GymBooking — Setup Guide
+# Ambiente locale
 
-## 1. Crea il progetto Supabase
+Prerequisiti: Docker con Compose v2, Python 3.10+ e Node indicato in `.nvmrc`.
+Le credenziali locali sono generate casualmente; non si usano più il progetto
+Supabase remoto e la password che erano fissati nei vecchi test.
 
-1. Vai su [supabase.com](https://supabase.com) e crea un account se non ce l'hai
-2. Crea un nuovo progetto (scegli una region EU)
-3. Salva la **Project URL** e l'**anon public key** (Settings → API)
+## Avvio completo
 
-## 2. Configura le variabili d'ambiente
-
-Copia il file `.env.local` e compila i valori reali:
-
-```
-VITE_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```bash
+git switch develop
+npm ci
+bash scripts/local.sh up
 ```
 
-## 3. Esegui lo schema SQL
+Il comando genera `.env.stack.local` se manca, avvia il backend, applica le
+migrazioni una sola volta, inserisce il seed e costruisce il frontend.
 
-1. Vai su **SQL Editor** nel dashboard Supabase
-2. Copia e incolla tutto il contenuto di `supabase/schema.sql`
-3. Clicca **Run**
+- App compilata: http://localhost:8080
+- API: http://localhost:8080
+- Email locali (Mailpit): http://localhost:8025
 
-Questo creerà:
-- Tabelle `slots`, `bookings`, `admins`
-- RLS policies
-- Trigger che blocca email non `@humans.tech`
-- Funzione `generate_slots` e genera i primi 14 giorni di slot
-- Seed con `admin@humans.tech` (modifica con la tua email admin)
+In locale Google è disabilitato. Per accedere, aprire **Sei un ospite?**, inserire
+`marco.ciotoli@humans.tech` e aprire il magic link ricevuto in Mailpit. Questo
+account è amministratore nel seed. Sono ammessi gli indirizzi `@humans.tech`.
+Il provider Google va configurato esplicitamente in produzione.
 
-## 4. Abilita Google OAuth
+La configurazione e i dati locali sono separati dalla produzione. `down` ferma
+lo stack mantenendo i volumi:
 
-1. Vai su **Authentication → Providers → Google**
-2. Abilita il provider Google
-3. Inserisci **Client ID** e **Client Secret** da Google Cloud Console
-
-### Come ottenere le credenziali Google:
-1. Vai su [console.cloud.google.com](https://console.cloud.google.com)
-2. Crea un progetto (o usa uno esistente)
-3. Abilita l'API **Google Identity**
-4. Crea credenziali OAuth 2.0 → Applicazione web
-5. Aggiungi agli **Authorized redirect URIs**:
-   - `https://xxxxxxxxxxxx.supabase.co/auth/v1/callback`
-   - `http://localhost:5173/auth/callback` (per sviluppo locale)
-   - `https://your-vercel-domain.vercel.app/auth/callback` (per produzione)
-
-## 5. Configura Redirect URLs in Supabase
-
-In **Authentication → URL Configuration**:
-
-- **Site URL**: `http://localhost:5173` (sviluppo) o il tuo dominio Vercel
-- **Redirect URLs** (aggiungi tutti):
-  - `http://localhost:5173/auth/callback`
-  - `https://your-vercel-domain.vercel.app/auth/callback`
-
-## 6. Aggiungi admin
-
-Per aggiungere altri admin, esegui nel SQL Editor:
-
-```sql
-INSERT INTO admins (email) VALUES ('tuaemail@humans.tech');
+```bash
+bash scripts/local.sh down
 ```
 
-## 7. Schedula la rigenerazione automatica degli slot
+Lo stack locale ora usa il progetto Compose `gym-local`. Eventuali volumi del
+precedente progetto `slokta-local` restano separati e non vengono eliminati.
+Fermare il vecchio stack prima di avviare il nuovo, per liberare le porte.
 
-Esegui una volta nel SQL Editor il file `supabase/phase3_cron_regen_slots.sql`.
-Lo script:
-- abilita l'estensione `pg_cron`,
-- schedula `generate_slots(30)` ogni giorno alle **03:00 UTC**,
-- esegue subito un backfill di 30 giorni.
+## Sviluppo con Vite
 
-Lo script è idempotente: rieseguibile in sicurezza (sostituisce la schedulazione precedente).
+Copiare `.env.example` in `.env.local` e impostare `VITE_SUPABASE_URL` a
+`http://localhost:8080`. Copiare **solo** il valore `ANON_KEY` da `.env.stack.local`
+in `VITE_SUPABASE_ANON_KEY`. Non usare `SERVICE_ROLE_KEY`.
 
-Verifica registrazione del job:
-
-```sql
-SELECT jobname, schedule, command, active
-FROM cron.job
-WHERE jobname = 'regen-slots-daily';
+```bash
+npm run dev
 ```
 
-Fallback manuale d'emergenza (se il cron non gira o serve estendere subito la finestra):
+L'ambiente locale generato consente il callback sia su `localhost:8080` che su
+`localhost:5173`. I test browser usano la build Docker sulla porta 8080.
 
-```sql
-SELECT public.generate_slots(30);
+## Test
+
+```bash
+npm run check
+npm run test:db
+python3 -m unittest discover -s scripts/tests -v
+npx playwright install chromium
+npm run test:e2e
 ```
 
-In alternativa, dal pannello admin il bottone **"Rigenera slot"** chiama la stessa funzione.
+`test:db` crea e distrugge un container PostgreSQL isolato. Verifica RLS, accessi,
+revoca, autorizzazioni admin, privacy delle prenotazioni, capienza concorrente,
+limite giornaliero concorrente, cancellazione e festività. Usa il contratto Auth
+minimo in `supabase/tests/bootstrap.sql`; l'integrazione con i servizi Supabase
+reali e il gateway è verificata separatamente dallo stack locale e da Playwright.
 
-## 8. Deploy su Vercel
+Playwright legge `.env.stack.local`, crea account e uno spazio temporanei e li
+rimuove al termine. Rifiuta host diversi da localhost/127.0.0.1. Gli account non
+richiedono password fisse. Verifica login obbligatorio, admin, prenotazione,
+cancellazione, ricaricamento delle rotte e uso da mobile.
 
-1. Pusha il repo su GitHub
-2. Vai su [vercel.com](https://vercel.com) e importa il repository
-3. Aggiungi le **Environment Variables** nel dashboard Vercel:
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-4. Deploy!
-5. Copia il dominio Vercel e aggiornalo in:
-   - Supabase → Authentication → URL Configuration → Site URL
-   - Google Cloud Console → OAuth → Authorized redirect URIs
+## Database
 
-## 9. Verifica funzionamento
+`supabase/migrations/` è l'unica sequenza di migrazioni eseguibile. Il runner
+registra checksum e versione, serializza le migrazioni e le applica in una
+transazione. Non modificare file già applicati: aggiungere un nuovo file SQL.
 
-- [ ] Login con Google `@humans.tech` funziona
-- [ ] Tentativo login con account non `@humans.tech` viene bloccato
-- [ ] Dashboard mostra gli slot del giorno
-- [ ] Prenotazione funziona e aggiorna il contatore
-- [ ] Cancellazione prenotazione funziona
-- [ ] Pagina "Le mie prenotazioni" mostra le prenotazioni future
-- [ ] URL `/admin` è accessibile solo agli admin
-- [ ] Export CSV nella pagina admin funziona
+`supabase/legacy/` conserva gli script storici incompleti solo come riferimento.
+Non eseguirli sul nuovo database. Il seed non viene rieseguito dai deploy di
+produzione dopo il bootstrap.
+
+Le prenotazioni passano dalle RPC `create_booking` e `cancel_booking`; l'identità
+viene ricavata dalla sessione sul server. `get_slot_bookers` restituisce soltanto
+nome, avatar e slot, mentre le righe private sono visibili al proprietario e agli
+admin. Il realtime segue gli aggiornamenti degli slot, senza rendere pubbliche
+le email delle prenotazioni.

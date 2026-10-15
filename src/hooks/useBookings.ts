@@ -70,18 +70,8 @@ export function useCreateBooking() {
   return useMutation({
     mutationFn: async (params: {
       slotId: string
-      userId: string
-      userEmail: string
-      userName: string
-      userAvatarUrl?: string
     }) => {
-      const { error } = await supabase.from('bookings').insert({
-        slot_id: params.slotId,
-        user_id: params.userId,
-        user_email: params.userEmail,
-        user_name: params.userName,
-        user_avatar_url: params.userAvatarUrl ?? null,
-      })
+      const { error } = await supabase.rpc('create_booking', { slot_id: params.slotId })
       if (error) throw error
     },
     onSuccess: () => {
@@ -98,10 +88,7 @@ export function useDeleteBooking() {
 
   return useMutation({
     mutationFn: async (bookingId: string) => {
-      const { error } = await supabase
-        .from('bookings')
-        .delete()
-        .eq('id', bookingId)
+      const { error } = await supabase.rpc('cancel_booking', { booking_id: bookingId })
       if (error) throw error
     },
     onSuccess: () => {

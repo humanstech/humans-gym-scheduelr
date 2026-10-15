@@ -8,13 +8,11 @@ import { SlotSection } from '@/components/dashboard/SlotSection'
 import { useActiveSpaces } from '@/hooks/useActiveSpaces'
 import { useSlots } from '@/hooks/useSlots'
 import { useMyBookings, useCreateBooking } from '@/hooks/useBookings'
-import { useAuth } from '@/hooks/useAuth'
 import { getNextWeekdays } from '@/lib/calendar'
 
 export function SpaceBookingView() {
   const { spaceId } = useParams<{ spaceId: string }>()
   const navigate = useNavigate()
-  const { user } = useAuth()
   const { data: spaces = [] } = useActiveSpaces()
 
   const space = spaces.find(s => s.id === spaceId)
@@ -61,10 +59,6 @@ export function SpaceBookingView() {
   const handleBook = async (slotId: string) => {
     await createBooking.mutateAsync({
       slotId,
-      userId: user!.id,
-      userEmail: user!.email ?? '',
-      userName: (user!.user_metadata?.full_name as string | undefined) ?? user!.email ?? '',
-      userAvatarUrl: (user!.user_metadata?.avatar_url as string | undefined) ?? undefined,
     })
   }
 

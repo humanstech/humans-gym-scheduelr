@@ -1,0 +1,49 @@
+{
+  admin off
+  auto_https off
+  servers {
+    protocols h1 h2
+    trusted_proxies static private_ranges
+    trusted_proxies_strict
+    client_ip_headers X-Forwarded-For
+  }
+}
+
+:8080 {
+  encode zstd gzip
+  header {
+    X-Content-Type-Options nosniff
+    Referrer-Policy strict-origin-when-cross-origin
+    X-Frame-Options DENY
+    -Server
+  }
+  handle /healthz {
+    respond "ok" 200
+  }
+  @legal path /terms /privacy /cookies
+  handle @legal {
+    root * /srv
+    rewrite * {path}.html
+    header Cache-Control "no-cache"
+    file_server
+  }
+  @api path /auth/v1/* /rest/v1/* /realtime/v1/*
+  handle @api {
+    reverse_proxy gateway:8000 {
+      header_up X-Forwarded-For {client_ip}
+      header_up X-Real-IP {client_ip}
+      header_up -Forwarded
+    }
+  }
+  handle /assets/* {
+    root * /srv
+    header Cache-Control "public, max-age=31536000, immutable"
+    file_server
+  }
+  handle {
+    root * /srv
+    header Cache-Control "no-cache"
+    try_files {path} /index.html
+    file_server
+  }
+}

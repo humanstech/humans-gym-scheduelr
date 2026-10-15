@@ -1,94 +1,52 @@
-/**
- * Authentication flow tests.
- *
- * Covers:
- * - Unauthenticated users are redirected to /login
- * - Login page shows only Google OAuth (no email/password form)
- * - Branding is correct
- * - Authenticated users see the dashboard
- */
 import { test, expect } from '@playwright/test'
+import { fixtures } from './helpers'
 
-// ── Unauthenticated ───────────────────────────────────────────────────────────
-
-test.describe('Login page — unauthenticated', () => {
+test.describe('Anonymous access', () => {
   test.use({ storageState: { cookies: [], origins: [] } })
-
-  test('redirects / to /login when not authenticated', async ({ page }) => {
-    await page.goto('/')
-    await expect(page).toHaveURL(/\/login$/)
+  test('public health endpoint is not the SPA fallback', async ({ request }) => {
+    const response = await request.get('/healthz')
+    expect(response.status()).toBe(200)
+    expect(await response.text()).toBe('ok')
   })
-
-  test('redirects /my-bookings to /login when not authenticated', async ({ page }) => {
-    await page.goto('/my-bookings')
-    await expect(page).toHaveURL(/\/login$/)
-  })
-
-  test('redirects /admin to /login when not authenticated', async ({ page }) => {
-    await page.goto('/admin')
-    await expect(page).toHaveURL(/\/login$/)
-  })
-
-  test('shows Google OAuth button', async ({ page }) => {
-    await page.goto('/login')
-    await expect(page.getByRole('button', { name: /accedi con google/i })).toBeVisible()
-  })
-
-  test('does NOT show email input field', async ({ page }) => {
-    await page.goto('/login')
-    // Email auth was removed — no input[type=email] should exist
-    await expect(page.locator('input[type="email"]')).not.toBeVisible()
-  })
-
-  test('does NOT show password input field', async ({ page }) => {
-    await page.goto('/login')
-    await expect(page.locator('input[type="password"]')).not.toBeVisible()
-  })
-
-  test('shows HumansGym brand on login page', async ({ page }) => {
-    await page.goto('/login')
-    await expect(page.getByText('HumansGym')).toBeVisible()
-  })
-})
-
-// ── Authenticated regular user (test@humans.tech) ─────────────────────────────
-
-test.describe('Authenticated user', () => {
-  // Uses storageState from playwright.config.ts (tests/.auth/user.json)
-
-  test('stays on dashboard after navigating to /', async ({ page }) => {
-    await page.goto('/')
-    await expect(page).not.toHaveURL(/\/login/)
-    await expect(page.getByRole('heading', { name: 'Prenota uno slot' })).toBeVisible({
-      timeout: 10_000,
+  for (const route of ['/', '/admin', '/my-bookings']) {
+    test(`${route} requires login`, async ({ page }) => {
+      await page.goto(route)
+      await expect(page).toHaveURL(/\/login$/)
+      await expect(page.getByRole('heading', { name: 'Gym', level: 1 })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Invia magic link' })).toBeVisible()
     })
+  }
+  test('Google sign-in appears only when the backend enables it', async ({ page }) => {
+    await page.route('**/auth/v1/settings', route => route.fulfill({ json: { external: { google: true } } }))
+    await page.goto('/login')
+    await expect(page.getByRole('button', { name: 'Accedi con Google' })).toBeVisible()
+    await page.getByRole('button', { name: /Sei un ospite/ }).click()
+    await expect(page.getByPlaceholder('tua@email.com')).toBeVisible()
   })
-
-  test('shows HumansGym brand in header', async ({ page }) => {
-    await page.goto('/')
-    await expect(page.getByRole('link', { name: /humansgym/i }).first()).toBeVisible()
+  test('guest magic-link form is available', async ({ page }) => {
+    await page.goto('/login')
+    await expect(page.getByPlaceholder('tua@email.com')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Invia magic link' })).toBeDisabled()
   })
-
-  test('shows Dashboard and "Le mie prenotazioni" nav links', async ({ page }) => {
-    await page.goto('/')
-    await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Le mie prenotazioni' })).toBeVisible()
-  })
-
-  test('Admin nav link is NOT visible for regular user', async ({ page }) => {
-    await page.goto('/')
-    // test@humans.tech is not in the admins table — admin link must not appear
-    // Wait a moment for the async isAdmin check to complete
-    await page.waitForTimeout(2_000)
-    await expect(page.getByRole('link', { name: 'Admin' })).not.toBeVisible()
-  })
-
-  test('/admin redirects regular user back to /', async ({ page }) => {
-    await page.goto('/admin')
-    // AdminGuard redirects non-admin to /
-    await expect(page).toHaveURL('http://localhost:5173/', { timeout: 8_000 })
-    await expect(page.getByRole('heading', { name: 'Prenota uno slot' })).toBeVisible({
-      timeout: 8_000,
-    })
+  test('magic link sent through SMTP signs in via the public callback', async ({ page, request }) => {
+    const email = `e2e-user-${fixtures().suffix}@humans.tech`
+    await page.goto('/login')
+    await page.getByPlaceholder('tua@email.com').fill(email)
+    await page.getByRole('button', { name: 'Invia magic link' }).click()
+    await expect(page.getByRole('heading', { name: 'Controlla la tua email' })).toBeVisible()
+    let messageId = ''
+    await expect.poll(async () => {
+      const response = await request.get('http://localhost:8025/api/v1/messages')
+      const data = await response.json()
+      const message = data.messages.find((m: { ID: string; To: { Address: string }[] }) => m.To.some(to => to.Address === email))
+      messageId = message?.ID ?? ''
+      return !!messageId
+    }).toBe(true)
+    const response = await request.get(`http://localhost:8025/api/v1/message/${messageId}`)
+    const mail = await response.json()
+    const link = (mail.HTML as string).match(/href="([^"]*\/auth\/v1\/verify[^"]*)"/)?.[1]
+    expect(link).toBeTruthy()
+    await page.goto(link!.replaceAll('&amp;', '&'))
+    await expect(page.getByRole('heading', { name: 'Prenota una sessione' })).toBeVisible()
   })
 })

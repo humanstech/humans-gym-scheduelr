@@ -1,53 +1,55 @@
-/**
- * Auth setup: signs in test@humans.tech via Supabase REST API and saves
- * the browser storage state so that all subsequent tests start authenticated.
- */
 import { test as setup, expect } from '@playwright/test'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
+import { API_URL, APP_URL, ANON_KEY, SERVICE_KEY, STORAGE_KEY } from './config'
 
-const AUTH_FILE = 'tests/.auth/user.json'
-
-const SUPABASE_URL = 'https://idzyjfrqywugbzldqnox.supabase.co'
-const SUPABASE_ANON_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkenlqZnJxeXd1Z2J6bGRxbm94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyNjk1NzcsImV4cCI6MjA4OTg0NTU3N30.2r4wlb3mxpvlIE_AHRZChL0RaCt0hCsr0UzcgjovisA'
-const STORAGE_KEY = 'sb-idzyjfrqywugbzldqnox-auth-token'
-
-setup('authenticate as test user', async ({ page }) => {
-  // Obtain a Supabase session via the password grant
-  const res = await page.request.post(
-    `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
-    {
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        'Content-Type': 'application/json',
-      },
-      data: {
-        email: 'test@humans.tech',
-        password: 'Test1234!',
-      },
+setup('create isolated accounts and space', async ({ request }) => {
+  if (!ANON_KEY || !SERVICE_KEY) throw new Error('Generate .env.stack.local and start the local stack first')
+  mkdirSync('tests/.auth', { recursive: true })
+  const adminHeaders = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` }
+  const suffix = randomBytes(6).toString('hex')
+  const users: string[] = []
+  let adminToken = ''
+  for (const role of ['user', 'admin']) {
+    const email = `e2e-${role}-${suffix}@humans.tech`
+    const password = randomBytes(24).toString('base64url')
+    const created = await request.post(`${API_URL}/auth/v1/admin/users`, {
+      headers: adminHeaders,
+      data: { email, password, email_confirm: true, user_metadata: { full_name: `E2E ${role}` } },
+    })
+    expect(created.ok(), await created.text()).toBeTruthy()
+    users.push((await created.json()).id)
+    if (role === 'admin') {
+      const added = await request.post(`${API_URL}/rest/v1/admins`, { headers: adminHeaders, data: { email } })
+      expect(added.ok(), await added.text()).toBeTruthy()
     }
-  )
-
-  expect(res.ok(), `Auth API returned ${res.status()}: ${await res.text()}`).toBeTruthy()
-  const session = await res.json()
-  expect(session.access_token).toBeTruthy()
-
-  // Navigate to the app so we can write to its localStorage origin
-  await page.goto('/')
-
-  // Inject the session – supabase-js reads this key on startup
-  await page.evaluate(
-    ([key, value]) => localStorage.setItem(key, JSON.stringify(value)),
-    [STORAGE_KEY, session] as [string, unknown]
-  )
-
-  // Reload so the app picks up the session and redirects away from /login
-  await page.goto('/')
-
-  // The dashboard should be visible
-  await expect(page.getByRole('heading', { name: 'Prenota uno slot' })).toBeVisible({
-    timeout: 10_000,
+    const login = await request.post(`${API_URL}/auth/v1/token?grant_type=password`, {
+      headers: { apikey: ANON_KEY }, data: { email, password },
+    })
+    expect(login.ok(), await login.text()).toBeTruthy()
+    const session = await login.json()
+    if (role === 'admin') adminToken = session.access_token
+    writeFileSync(`tests/.auth/${role}.json`, JSON.stringify({
+      cookies: [], origins: [{ origin: APP_URL, localStorage: [{ name: STORAGE_KEY, value: JSON.stringify(session) }] }],
+    }))
+  }
+  const space = await request.post(`${API_URL}/rest/v1/spaces`, {
+    headers: { ...adminHeaders, Prefer: 'return=representation' },
+    data: { name: `E2E ${suffix}`, min_capacity: 1, max_capacity: 2, available_days: [1,2,3,4,5,6,7] },
   })
-
-  // Persist cookies + localStorage for all downstream tests
-  await page.context().storageState({ path: AUTH_FILE })
+  expect(space.ok(), await space.text()).toBeTruthy()
+  const spaceId = (await space.json())[0].id
+  const times = await request.post(`${API_URL}/rest/v1/space_time_slots`, {
+    headers: adminHeaders,
+    data: Array.from({ length: 7 }, (_, i) => [
+      { space_id: spaceId, day_of_week: i + 1, start_time: '10:00', end_time: '11:00' },
+      { space_id: spaceId, day_of_week: i + 1, start_time: '18:00', end_time: '19:00' },
+    ]).flat(),
+  })
+  expect(times.ok(), await times.text()).toBeTruthy()
+  const generated = await request.post(`${API_URL}/rest/v1/rpc/generate_slots`, {
+    headers: { apikey: ANON_KEY, Authorization: `Bearer ${adminToken}` }, data: { days_ahead: 90 },
+  })
+  expect(generated.ok(), await generated.text()).toBeTruthy()
+  writeFileSync('tests/.auth/fixtures.json', JSON.stringify({ users, spaceId, suffix }))
 })

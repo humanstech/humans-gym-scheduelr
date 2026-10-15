@@ -1,4 +1,6 @@
 import { useState, useCallback } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { LegalLinks } from '@/components/LegalLinks'
 import { Navigate } from 'react-router-dom'
 import { AlertCircle, Mail, ArrowLeft, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -8,6 +10,18 @@ import { GoogleIcon } from '@/components/icons/GoogleIcon'
 
 export function Login() {
   const { session, loading, signIn, signInWithMagicLink } = useAuth()
+  const { data: googleEnabled = false } = useQuery({
+    queryKey: ['auth-settings'],
+    queryFn: async () => {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/auth/v1/settings`, {
+        headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY },
+      })
+      if (!response.ok) throw new Error('Auth settings unavailable')
+      const settings = await response.json()
+      return settings.external?.google === true
+    },
+    staleTime: 60_000,
+  })
   const [error, setError] = useState<string | null>(null)
   const [signing, setSigning] = useState(false)
   const [guestMode, setGuestMode] = useState(false)
@@ -60,16 +74,17 @@ export function Login() {
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground text-3xl font-black">
-            S
+            G
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">Slokta</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Gym</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Prenota spazi aziendali
+            Gym è il servizio di Humans per consultare le disponibilità della palestra
+            e degli spazi aziendali, prenotare una sessione e gestire le proprie prenotazioni.
           </p>
         </div>
 
         <div className="rounded-xl border bg-card p-8 shadow-sm space-y-6 text-center">
-          {!guestMode ? (
+          {!guestMode && googleEnabled ? (
             <>
               <div>
                 <h2 className="text-lg font-semibold">Accesso riservato</h2>
@@ -120,18 +135,18 @@ export function Login() {
                   Clicca il link per accedere.
                 </p>
               </div>
-              <button
+              {googleEnabled && <button
                 onClick={handleBackToLogin}
                 className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mx-auto"
               >
                 <ArrowLeft className="h-3 w-3" />
                 Torna al login
-              </button>
+              </button>}
             </>
           ) : (
             <>
               <div>
-                <h2 className="text-lg font-semibold">Accesso ospite</h2>
+                <h2 className="text-lg font-semibold">{googleEnabled ? 'Accesso ospite' : 'Accedi a Gym'}</h2>
                 <p className="mt-2 text-sm text-muted-foreground">
                   Inserisci la tua email. Ti invieremo un link di accesso diretto.
                 </p>
@@ -168,16 +183,17 @@ export function Login() {
                 </Button>
               </form>
 
-              <button
+              {googleEnabled && <button
                 onClick={handleBackToLogin}
                 className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mx-auto"
               >
                 <ArrowLeft className="h-3 w-3" />
                 Torna al login
-              </button>
+              </button>}
             </>
           )}
         </div>
+        <LegalLinks />
       </div>
     </div>
   )

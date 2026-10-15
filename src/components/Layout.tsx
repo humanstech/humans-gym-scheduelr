@@ -12,6 +12,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useAuth } from '@/hooks/useAuth'
 import { useIsAdmin } from '@/hooks/useIsAdmin'
+import { LegalLinks } from '@/components/LegalLinks'
 import { cn } from '@/lib/utils'
 
 interface LayoutProps {
@@ -46,9 +47,9 @@ export function Layout({ children }: LayoutProps) {
           <div className="flex items-center gap-6">
             <Link to="/" className="flex items-center gap-2 font-semibold">
               <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground text-sm font-black">
-                S
+                G
               </div>
-              <span>Slokta</span>
+              <span>Gym</span>
             </Link>
             <nav className="hidden items-center gap-1 sm:flex">
               {navLinks.map(({ to, label, icon: Icon }) => (
@@ -114,6 +115,7 @@ export function Layout({ children }: LayoutProps) {
       <main className="mx-auto max-w-5xl px-4 pt-8 pb-24 sm:pb-12">
         {children}
       </main>
+      <div className="px-4 pb-6"><LegalLinks /></div>
     </div>
   )
 }

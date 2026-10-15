@@ -1,0 +1,16 @@
+node_modules
+dist
+.git
+.env*
+**/.env*
+tests/.auth
+test-results
+playwright-report
+.claude
+.playwright-mcp
+docs
+
+*.pem
+**/*.pem
+bundles
+*.dump

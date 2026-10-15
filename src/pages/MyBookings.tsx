@@ -45,6 +45,7 @@ function BookingRow({
       <Button
         variant="ghost"
         size="icon"
+        aria-label="Cancella prenotazione"
         onClick={() => onCancel(booking.id)}
         disabled={isPending}
         className="text-muted-foreground hover:text-destructive"

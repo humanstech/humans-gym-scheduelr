@@ -18,6 +18,7 @@ export function DateSelector({
         return (
           <button
             key={day.toISOString()}
+            data-date={format(day, 'yyyy-MM-dd')}
             onClick={() => onSelect(day)}
             className={cn(
               'flex shrink-0 flex-col items-center rounded-lg border px-3 py-2 text-sm transition-colors',

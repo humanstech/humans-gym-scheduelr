@@ -1,0 +1,187 @@
+name: gym
+
+x-service: &service
+  restart: unless-stopped
+  platform: linux/arm64
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  db:
+    <<: *service
+    image: ${DB_IMAGE:-public.ecr.aws/supabase/postgres:17.6.1.171}
+    mem_limit: 768m
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Generate the environment first}
+      POSTGRES_DB: postgres
+      JWT_EXP: 3600
+    command: [postgres, -c, config_file=/etc/postgresql/postgresql.conf, -c, log_min_messages=warning, -c, shared_buffers=128MB, -c, max_connections=100]
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - db-config:/etc/postgresql-custom
+      - ./postgres/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:ro
+      - ./postgres/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:ro
+      - ./postgres/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:ro
+    healthcheck:
+      test: [CMD, pg_isready, -U, postgres, -h, localhost]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    shm_size: 256mb
+
+  auth:
+    <<: *service
+    image: ${AUTH_IMAGE:-public.ecr.aws/supabase/gotrue:v2.197.0}
+    mem_limit: 128m
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: ${SUPABASE_PUBLIC_URL}/auth/v1
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@db:5432/postgres
+      GOTRUE_SITE_URL: ${SITE_URL}
+      GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS:-${SITE_URL}/auth/callback}
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_SECRET: ${JWT_SECRET}
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
+      GOTRUE_MAILER_AUTOCONFIRM: "false"
+      GOTRUE_EXTERNAL_PHONE_ENABLED: "false"
+      GOTRUE_EXTERNAL_GOOGLE_ENABLED: ${GOOGLE_ENABLED:-true}
+      GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_GOOGLE_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI: ${SUPABASE_PUBLIC_URL}/auth/v1/callback
+      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_FROM:-}
+      GOTRUE_SMTP_HOST: ${SMTP_HOST:-}
+      GOTRUE_SMTP_PORT: ${SMTP_PORT:-587}
+      GOTRUE_SMTP_USER: ${SMTP_USER:-}
+      GOTRUE_SMTP_PASS: ${SMTP_PASS:-}
+      GOTRUE_SMTP_SENDER_NAME: Gym
+      GOTRUE_RATE_LIMIT_EMAIL_SENT: ${SMTP_RATE_LIMIT_EMAIL_SENT:-30}
+      GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
+    healthcheck:
+      test: [CMD, wget, --spider, -q, http://127.0.0.1:9999/health]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  rest:
+    <<: *service
+    image: ${REST_IMAGE:-postgrest/postgrest:v14.17}
+    mem_limit: 192m
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@db:5432/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      PGRST_ADMIN_SERVER_PORT: 3001
+      PGRST_ADMIN_SERVER_HOST: localhost
+    healthcheck:
+      test: [CMD, postgrest, --ready]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  realtime:
+    <<: *service
+    image: ${REALTIME_IMAGE:-supabase/realtime:v2.134.10}
+    mem_limit: 512m
+    networks:
+      default:
+        aliases: [realtime-dev.realtime]
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      PORT: 4000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: supabase_admin
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: postgres
+      DB_AFTER_CONNECT_QUERY: SET search_path TO _realtime
+      DB_ENC_KEY: ${REALTIME_DB_ENC_KEY}
+      API_JWT_SECRET: ${JWT_SECRET}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      METRICS_JWT_SECRET: ${JWT_SECRET}
+      ERL_AFLAGS: -proto_dist inet_tcp +S 2:2
+      DNS_NODES: "''"
+      RLIMIT_NOFILE: 10000
+      APP_NAME: realtime
+      SEED_SELF_HOST: "true"
+      RUN_JANITOR: "true"
+    healthcheck:
+      test: [CMD-SHELL, 'curl -fsS -o /dev/null -H "Authorization: Bearer ${ANON_KEY}" http://127.0.0.1:4000/api/tenants/realtime-dev/health']
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+  gateway:
+    <<: *service
+    image: ${GATEWAY_IMAGE:-kong/kong:3.9.3}
+    mem_limit: 256m
+    depends_on:
+      auth: {condition: service_healthy}
+      rest: {condition: service_healthy}
+      realtime: {condition: service_healthy}
+    environment:
+      KONG_TRUSTED_IPS: 127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,::1/128,fc00::/7
+      KONG_REAL_IP_HEADER: X-Forwarded-For
+      KONG_REAL_IP_RECURSIVE: "on"
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /tmp/kong.yml
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_LISTEN: "off"
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: cors,key-auth,request-transformer
+      KONG_NGINX_WORKER_PROCESSES: 2
+      ANON_KEY: ${ANON_KEY}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+    volumes:
+      - ./kong.yml:/etc/kong/template.yml:ro
+      - ./kong-entrypoint.sh:/gym-entrypoint.sh:ro
+    entrypoint: [sh, /gym-entrypoint.sh]
+    healthcheck:
+      test: [CMD, kong, health]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    <<: *service
+    image: ${WEB_IMAGE:-gym-web:local}
+    mem_limit: 96m
+    build:
+      context: ..
+      args:
+        VITE_SUPABASE_URL: ${SUPABASE_PUBLIC_URL}
+        VITE_SUPABASE_ANON_KEY: ${ANON_KEY}
+        RELEASE_SHA: ${RELEASE_SHA:-local}
+    depends_on:
+      gateway: {condition: service_healthy}
+    ports:
+      - "127.0.0.1:${GYM_PORT:?Set the assigned loopback port}:8080"
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8080/healthz]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  db-data:
+  db-config:

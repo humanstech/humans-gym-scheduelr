@@ -1,0 +1,14 @@
+[Unit]
+Description=Deploy verified main of Gym
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/gym/tools/production.py poll
+TimeoutStartSec=20min
+UMask=0077
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
