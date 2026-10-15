@@ -84,3 +84,19 @@ né in GitHub. Non cambiare le chiavi database/JWT già generate.
 Per le password con spazi o `#`, racchiudere il valore tra apici singoli nel
 formato dotenv. Quando i campi sono compilati basta comunicare **“salvato”**.
 Verificheremo poi un vero login Google e un vero magic link ricevuto via email.
+
+### Applicare le credenziali dopo il primo deploy
+
+Dopo la sincronizzazione dell'env, l'operatore aggiorna il solo servizio Auth
+con le immagini della release corrente, senza ricostruire il frontend:
+
+```bash
+sudo flock /opt/gym/deploy.lock python3 /opt/gym/tools/stack.py compose \
+  --release /opt/gym/current --env-file /opt/gym/.env \
+  -- up -d --no-deps --no-build --pull never --wait --wait-timeout 180 auth
+```
+
+Il pulsante Google compare al successivo caricamento della pagina quando
+Auth espone il provider abilitato. Verificare poi il login con un account
+autorizzato e la ricezione del link email. Il timer di deploy, se main è già
+pubblicato, non applica da solo una modifica alle credenziali.

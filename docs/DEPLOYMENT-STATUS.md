@@ -1,44 +1,84 @@
 # Stato verifiche Gym — 15 ottobre 2026
 
-## Verificato sulla macchina condivisa
+**Online: https://gym.humans.tech**
 
-- SSH autorizzato come `ubuntu` su `63.178.93.191`.
-- Architettura `aarch64`, Docker 29.9.0, Compose 5.6.0.
-- RAM totale circa 3,8 GiB, spazio libero circa 12 GiB al sopralluogo.
-- Porta assegnata 18200 libera al sopralluogo.
-- Create soltanto directory Gym sotto `/opt/gym`, root, modalità 700.
-- Generato `/opt/gym/.env`, root, modalità 600; nessun segreto nei log.
-- SMTP predisposto per Resend, mittente `gym@services.humans.tech`.
-- Nessun pacchetto installato, nessuna modifica a firewall o Docker daemon.
-- Nessuna modifica ai container, file, volumi o timer di CyberMafia o dell’edge.
+Release di produzione: `476af9661b44e8d50845b4dfcbceb6141922d10b`, merge
+della [PR #3](https://github.com/humanstech/humans-gym-scheduelr/pull/3) su
+`main`. La [CI del commit](https://github.com/humanstech/humans-gym-scheduelr/actions/runs/38768579401)
+è riuscita. `/version.json`, `/opt/gym/current` e lo stato del deploy indicano
+lo stesso SHA. Le pagine legali erano state integrate con la PR #2.
 
-## Verificato in locale ARM64
+## Verificato realmente in produzione
 
-- Le sei immagini runtime sono `linux/arm64`.
-- Stack completo sano con limiti RAM, ingresso HTTP unico su loopback e rete privata.
-- Lint e build frontend riusciti.
-- 16 test degli script riusciti: integrità bundle, architettura reale delle
-  immagini, rifiuto tag estranei, main/CI, rollback e backup facoltativo.
-- 14 test browser riusciti: login tramite magic link SMTP locale, autorizzazioni,
-  prenotazioni, cancellazioni, navigazione, mobile e realtime WebSocket.
-- Primo avvio su un database vuoto verificato: inizializzazione di DB e Auth,
-  migrazioni applicative e seed riusciti. Risorse temporanee eliminate.
-- Riavvio esplicito dei sei container Gym locali e ritorno allo stato healthy.
-- Bundle completo del commit di sviluppo `1e6fe05` costruito su ARM nativo:
-  checksum, immagini reali ARM64, tag isolati, importazione Docker, revisione
-  frontend, estrazione sorgenti e riferimenti Compose verificati. Non trasferito
-  in produzione; i bundle di sviluppo sono rifiutati dal deploy.
-- Test dedicato dell’health pubblico riuscito dopo la correzione della priorità
-  della rotta rispetto al fallback SPA.
+- EC2 `63.178.93.191`, Ubuntu ARM64, Docker 29.9.0, Compose 5.6.0.
+- Bundle costruito su ARM nativo fuori dalla EC2, trasferito via SSH e verificato
+  dal server: checksum, corrispondenza con main, CI e identità delle sei immagini.
+  L'importazione gestisce sia gli ID config Docker classici sia gli ID manifest
+  del backend containerd di Docker 29.
+- Primo avvio da database vuoto: migrazioni e seed riusciti; un amministratore
+  configurato (`marco.ciotoli@humans.tech`), un ambiente Palestra, 25 fasce
+  settimanali e 300 slot iniziali. Dominio utenti autorizzato: `humans.tech`.
+- Tutti e sei i container Gym sono healthy, `linux/arm64`, con restart
+  `unless-stopped`, limiti RAM e log JSON limitati a 3 × 10 MB.
+- Unico ingresso pubblicato: `127.0.0.1:18200 → 8080`; gli altri servizi non
+  pubblicano porte host. `/opt/gym` root 700 e `.env` root 600.
+- `/healthz` risponde `ok` via HTTPS; Auth e REST rispondono correttamente.
+- Certificato valido per `gym.humans.tech`, emesso da Let's Encrypt YE2,
+  scadenza 13 gennaio 2027. Emissione riuscita confermata anche nei log edge.
+- `/terms`, `/privacy` e `/cookies`: HTTP 200, contenuto leggibile nel browser
+  anche con JavaScript disabilitato, navigazione tra le pagine presente.
+- Login pubblico, form email e link legali verificati nel browser; nessun errore
+  JavaScript rilevato e nessun overflow orizzontale alla larghezza mobile 390 px.
+- Connessione e sottoscrizione Realtime WebSocket riuscite attraverso il dominio
+  pubblico, senza creare prenotazioni o inviare messaggi.
+- `docker restart` eseguito sui soli sei container Gym, seguito da Compose
+  `up -d --wait` e smoke HTTPS riusciti. Conteggi del database invariati.
+- Confrontati gli orari `StartedAt` prima/dopo: nessun riavvio di edge o
+  CyberMafia. Nell'edge è stato aggiunto soltanto `conf/sites/gym.caddy`, seguito
+  da reload; nessuna modifica ai file globali o agli altri siti.
+- Autenticazione SMTP Resend riuscita dalla EC2. Mittente configurato:
+  `gym@services.humans.tech`. Nessuna email di prova inviata dall'agente.
+- `gym-deploy.timer` abilitato e attivo. Una nuova esecuzione di `poll` sullo
+  stesso main termina senza cambiare la release. `gym-backup.timer` disabilitato.
+- Circa 6,6 GiB liberi dopo la pulizia del solo archivio Gym già importato e dei
+  tag Gym inutilizzati del primo tentativo. Immagini attive, volumi e release
+  conservati; bundle originale conservato sul builder locale.
+- Nessun pacchetto installato, nessuna modifica a firewall, Docker daemon,
+  risorse o timer degli altri progetti; nessun prune globale.
 
-## Non ancora verificato in produzione
+## Verificato in locale
 
-- Deploy di un bundle di `main`, health via `https://gym.humans.tech` e certificato Gym.
-- Login Google reale e consegna email tramite Resend.
-- Riavvio dei container Gym sulla EC2 e persistenza dei dati.
-- Backup/ripristino su EC2: **non eseguiti; backup automatici esclusi dal proprietario**.
+- Lint e build frontend riusciti; 21 test degli script riusciti, inclusi controlli
+  del bundle, ID OCI/config, architettura, main/CI, rollback e backup facoltativo.
+- 19 casi browser verificati tra esecuzione completa e riesecuzione dei tre
+  selettori corretti: login magic link con SMTP locale, autorizzazioni,
+  prenotazioni, cancellazioni, amministrazione, mobile, realtime e pagine legali.
+- Primo avvio su database vuoto e riavvio dello stack locale riusciti.
+- Il ripristino di backup era stato provato solo in locale prima della revisione
+  del deploy per la macchina condivisa; non è una prova di ripristino in produzione.
 
-La configurazione Google e la API key Resend devono essere completate nel solo
-file `.env.production.local` sul computer del proprietario e poi sincronizzate
-in `/opt/gym/.env`. La rotta edge di Gym e i timer non sono stati attivati.
-La PR verso main resta da completare prima del bundle di produzione.
+## Da completare o non eseguito
+
+- **Google OAuth**: credenziali ancora assenti nell'env al momento del deploy;
+  `GOOGLE_ENABLED=false`. L'accesso email è abilitato. Dopo la configurazione
+  Google, aggiornare il solo `.env.production.local`, sincronizzarlo in
+  `/opt/gym/.env` e ricreare Auth seguendo [CREDENTIALS.md](CREDENTIALS.md).
+- **Consegna email e login reale**: SMTP AUTH verificata, ma consegna tramite
+  Resend e apertura del magic link da parte dell'utente non ancora provate.
+  Non è stata verificata via API la configurazione del dominio mittente:
+  la chiave disponibile ha permessi limitati all'invio.
+- **Backup/ripristino su EC2**: non eseguiti; backup automatici e pre-deploy
+  disabilitati per scelta esplicita del proprietario. Nessuna copia S3.
+- Nessuna prova di carico o revisione legale professionale delle informative.
+
+## Aggiornamenti successivi
+
+Sviluppo su `develop`, PR e CI obbligatoria per `main`. Preparazione e upload del
+bundle sul builder restano un passaggio dell'operatore; il timer sul server
+pubblica solo il main approvato dalla CI quando il relativo bundle è disponibile.
+GitHub non costruisce immagini Docker e la EC2 non esegue build o emulazione.
+Procedura completa: [PRODUCTION.md](PRODUCTION.md).
+
+URL per Google: homepage `https://gym.humans.tech/login`, privacy
+`https://gym.humans.tech/privacy`, termini `https://gym.humans.tech/terms`.
+Cookie policy aggiuntiva: `https://gym.humans.tech/cookies`.
