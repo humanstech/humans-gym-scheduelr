@@ -27,7 +27,7 @@ export function useSlots(date: Date, spaceId?: string) {
       .channel(channelName)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'bookings' },
+        { event: '*', schema: 'public', table: 'slots' },
         () => {
           queryClient.invalidateQueries({ queryKey: ['slots', dateStr, spaceId] })
         }
@@ -59,9 +59,7 @@ export function useSlots(date: Date, spaceId?: string) {
 
       const slotIds = slots.map(s => s.id)
       const { data: bookings, error: bError } = await supabase
-        .from('bookings')
-        .select('slot_id, user_name, user_avatar_url')
-        .in('slot_id', slotIds)
+        .rpc('get_slot_bookers', { slot_ids: slotIds })
 
       if (bError) throw bError
 

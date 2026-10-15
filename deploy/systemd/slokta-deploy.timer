@@ -1,0 +1,11 @@
+[Unit]
+Description=Check main every two minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=2min
+RandomizedDelaySec=15
+Unit=slokta-deploy.service
+
+[Install]
+WantedBy=timers.target

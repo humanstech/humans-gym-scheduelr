@@ -232,7 +232,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      cancel_underfilled_slots: { Args: never; Returns: undefined }
+      create_booking: { Args: { slot_id: string }; Returns: string }
+      cancel_booking: { Args: { booking_id: string }; Returns: undefined }
+      get_slot_bookers: {
+        Args: { slot_ids: string[] }
+        Returns: { slot_id: string; user_name: string; user_avatar_url: string | null }[]
+      }
+      is_allowed: { Args: never; Returns: boolean }
       easter_date: { Args: { year: number }; Returns: string }
       generate_slots: { Args: { days_ahead?: number }; Returns: undefined }
       is_admin: { Args: never; Returns: boolean }

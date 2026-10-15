@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Users, AlertTriangle, XCircle, Lock } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -68,7 +69,12 @@ export function SlotCard({ slot, isBooked, bookingId, hasBookingForDay, onBook, 
   const isUnderMin = slot.booking_count < slot.min_capacity
 
   const slotStart = new Date(`${slot.date}T${slot.start_time}`)
-  const isCutoffPassed = slotStart.getTime() - Date.now() < 15 * 60 * 1000
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 15_000)
+    return () => window.clearInterval(timer)
+  }, [])
+  const isCutoffPassed = slotStart.getTime() - now <= 15 * 60 * 1000
   const deleteBooking = useDeleteBooking()
 
   const handleBook = async () => {

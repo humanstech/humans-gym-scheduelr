@@ -1,0 +1,61 @@
+_format_version: "3.0"
+_transform: true
+consumers:
+  - username: anon
+    keyauth_credentials:
+      - key: ANON_KEY_PLACEHOLDER
+  - username: service_role
+    keyauth_credentials:
+      - key: SERVICE_KEY_PLACEHOLDER
+services:
+  - name: auth-callback
+    url: http://auth:9999/callback
+    routes:
+      - name: auth-callback
+        paths: [/auth/v1/callback]
+        strip_path: true
+  - name: auth-authorize
+    url: http://auth:9999/authorize
+    routes:
+      - name: auth-authorize
+        paths: [/auth/v1/authorize]
+        strip_path: true
+  - name: auth-verify
+    url: http://auth:9999/verify
+    routes:
+      - name: auth-verify
+        paths: [/auth/v1/verify]
+        strip_path: true
+  - name: auth
+    url: http://auth:9999/
+    routes:
+      - name: auth
+        paths: [/auth/v1/]
+        strip_path: true
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: false
+  - name: rest
+    url: http://rest:3000/
+    routes:
+      - name: rest
+        paths: [/rest/v1/]
+        strip_path: true
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: true
+  - name: realtime
+    url: http://realtime-dev.realtime:4000/socket
+    routes:
+      - name: realtime
+        paths: [/realtime/v1/]
+        strip_path: true
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: false

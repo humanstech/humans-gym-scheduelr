@@ -16,6 +16,12 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+.env.*
+!.env.example
+!deploy/production.env.example
+*.dump
+__pycache__/
+*.pyc
 
 # Editor directories and files
 .vscode/*

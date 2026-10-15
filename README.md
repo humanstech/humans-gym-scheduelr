@@ -1,73 +1,30 @@
-# React + TypeScript + Vite
+# Humans Gym / Slokta
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Prenotazione degli spazi aziendali: React, TypeScript e Vite; backend Supabase
+self-hosted su EC2 (PostgreSQL, Auth, PostgREST, Realtime e pg_cron).
 
-Currently, two official plugins are available:
+- **Sviluppo:** branch `develop`.
+- **Produzione:** solo l'ultimo commit di `main` che supera la CI.
+- **Procedura di produzione:** [docs/PRODUCTION.md](docs/PRODUCTION.md).
+- **Configurazione locale:** [SETUP.md](SETUP.md).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Controlli
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm ci
+npm run lint
+npm run build      # richiede le due variabili VITE_SUPABASE_*
+npm run test:db    # PostgreSQL temporaneo in Docker; non usa dati reali
+python3 -m unittest discover -s scripts/tests -v
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+La CI esegue un solo job Linux su push a `develop` e `main`, con cache npm e
+cancellazione delle esecuzioni superate. Non esegue Playwright né pubblica
+immagini/artifact ad ogni push. Il deploy è un servizio systemd su EC2 che
+controlla `main` ogni due minuti, verifica la CI per lo stesso SHA e costruisce
+l'immagine sulla macchina. Nessuna credenziale AWS viene salvata su GitHub.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+Il repository è pubblico: i runner GitHub standard sono gratuiti secondo la
+[documentazione GitHub](https://docs.github.com/en/actions/concepts/billing-and-usage).
+L'architettura riduce comunque il tempo dei job e continua a funzionare se il
+repository diventa privato, configurando allora l'accesso in lettura da EC2.

@@ -136,7 +136,7 @@ function EmailSection() {
       qc.invalidateQueries({ queryKey: ['allowedEmails'] })
       setEmailInput('')
       setNoteInput('')
-      toast.success('Email aggiunta — crea l\'account in Supabase Dashboard > Auth > Users')
+      toast.success('Email autorizzata. L’ospite può accedere tramite il link inviato via email.')
     },
     onError: () => toast.error('Errore: email già presente o non valida'),
   })
@@ -165,8 +165,8 @@ function EmailSection() {
         <h3 className="font-semibold">Email specifiche</h3>
       </div>
       <p className="text-sm text-muted-foreground">
-        Utenti con credenziali email/password. Dopo aver aggiunto l'email qui, crea l'account in{' '}
-        <strong>Supabase Dashboard → Auth → Users → Invite User</strong>.
+        Autorizza gli ospiti ad accedere con il link ricevuto via email.
+        Dopo aver aggiunto un indirizzo, l’ospite può usare “Sei un ospite?” nella pagina di accesso.
       </p>
       <div className="flex gap-2">
         <label htmlFor="email-input" className="sr-only">Email ospite da aggiungere</label>
