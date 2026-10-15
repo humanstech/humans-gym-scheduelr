@@ -21,8 +21,15 @@
   immagini, rifiuto tag estranei, main/CI, rollback e backup facoltativo.
 - 14 test browser riusciti: login tramite magic link SMTP locale, autorizzazioni,
   prenotazioni, cancellazioni, navigazione, mobile e realtime WebSocket.
+- Primo avvio su un database vuoto verificato: inizializzazione di DB e Auth,
+  migrazioni applicative e seed riusciti. Risorse temporanee eliminate.
 - Riavvio esplicito dei sei container Gym locali e ritorno allo stato healthy.
-- Preparazione di un bundle completo: in corso di verifica; non trasferito in produzione.
+- Bundle completo del commit di sviluppo `1e6fe05` costruito su ARM nativo:
+  checksum, immagini reali ARM64, tag isolati, importazione Docker, revisione
+  frontend, estrazione sorgenti e riferimenti Compose verificati. Non trasferito
+  in produzione; i bundle di sviluppo sono rifiutati dal deploy.
+- Test dedicato dell’health pubblico riuscito dopo la correzione della priorità
+  della rotta rispetto al fallback SPA.
 
 ## Non ancora verificato in produzione
 

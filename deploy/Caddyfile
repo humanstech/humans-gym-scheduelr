@@ -17,7 +17,9 @@
     X-Frame-Options DENY
     -Server
   }
-  respond /healthz "ok" 200
+  handle /healthz {
+    respond "ok" 200
+  }
   @api path /auth/v1/* /rest/v1/* /realtime/v1/*
   handle @api {
     reverse_proxy gateway:8000 {

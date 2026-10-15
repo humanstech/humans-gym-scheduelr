@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
-      VITE_SUPABASE_URL: http://localhost:8000
+      VITE_SUPABASE_URL: http://localhost:8080
       VITE_SUPABASE_ANON_KEY: sb_publishable_ci_build_only
     steps:
       - uses: actions/checkout@v4
@@ -31,4 +31,4 @@ jobs:
       - name: Database authorization and concurrency tests
         run: npm run test:db
 # No Docker image publishing, browser download, artifacts or deployment wait.
-# EC2 polls main and deploys only the SHA with a successful run of this workflow.
+# EC2 polls main and deploys only its verified ARM64 bundle after this workflow succeeds.

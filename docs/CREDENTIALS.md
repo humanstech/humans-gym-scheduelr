@@ -51,7 +51,7 @@ SMTP_FROM=gym@services.humans.tech
 ```
 
 La porta 587 usa STARTTLS. La chiave va inserita solo in `SMTP_PASS`, mai nelle
-variabili `VITE_*`. `gym@services.humans.tech` è utilizzabile solo se il dominio è
+variabili `VITE_*`. `gym@services.humans.tech` è utilizzabile solo se `services.humans.tech` è
 verificato e la chiave è autorizzata. Non occorre una casella per autenticarsi
 al server SMTP.
 

@@ -3,6 +3,11 @@ import { fixtures } from './helpers'
 
 test.describe('Anonymous access', () => {
   test.use({ storageState: { cookies: [], origins: [] } })
+  test('public health endpoint is not the SPA fallback', async ({ request }) => {
+    const response = await request.get('/healthz')
+    expect(response.status()).toBe(200)
+    expect(await response.text()).toBe('ok')
+  })
   for (const route of ['/', '/admin', '/my-bookings']) {
     test(`${route} requires login`, async ({ page }) => {
       await page.goto(route)

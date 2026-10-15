@@ -216,7 +216,7 @@ class Production:
             old = Stack(self.root / 'releases' / previous['sha'], self.env_file, sha=previous['sha'])
             backup = old.backup(self.root / 'backups')
         try:
-            stack.compose('up', '-d', '--no-build', '--pull', 'never', '--wait', '--wait-timeout', '180', 'db')
+            stack.compose('up', '-d', '--no-build', '--pull', 'never', '--wait', '--wait-timeout', '180', 'db', 'auth')
             stack.migrate()
             if bootstrap:
                 stack.seed()

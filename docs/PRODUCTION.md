@@ -129,7 +129,8 @@ se il reload fallisce. Non ricrea il container edge. Il primo avvio può mostrar
 
 Il deploy controlla porta libera (oppure proprietà del container Gym già attivo),
 architettura nativa, permessi e spazio libero. Carica il bundle senza build o
-pull, applica le migrazioni e avvia con `docker compose up -d --wait`.
+pull, inizializza DB e Auth (che crea tabelle e funzioni di autenticazione), applica le migrazioni
+applicative e avvia con `docker compose up -d --wait`.
 Il seed iniziale abilita `humans.tech` e l’amministratore
 `marco.ciotoli@humans.tech`. Lo smoke verifica HTTPS, `/healthz`, SHA del frontend,
 Auth e REST. Solo dopo aggiorna `current` e lo stato della release.
