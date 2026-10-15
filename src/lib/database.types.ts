@@ -507,6 +507,7 @@ export type Database = {
           participants: { name: string; avatar_url: string | null }[]
         }[]
       }
+      admin_promote_user: { Args: { user_id: string }; Returns: undefined }
       admin_list_users: {
         Args: never
         Returns: {
