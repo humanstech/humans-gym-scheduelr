@@ -12,20 +12,25 @@ test.describe('Anonymous access', () => {
     test(`${route} requires login`, async ({ page }) => {
       await page.goto(route)
       await expect(page).toHaveURL(/\/login$/)
-      await expect(page.getByRole('heading', { name: 'Gym' })).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Accedi con Google' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Gym', level: 1 })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Invia magic link' })).toBeVisible()
     })
   }
+  test('Google sign-in appears only when the backend enables it', async ({ page }) => {
+    await page.route('**/auth/v1/settings', route => route.fulfill({ json: { external: { google: true } } }))
+    await page.goto('/login')
+    await expect(page.getByRole('button', { name: 'Accedi con Google' })).toBeVisible()
+    await page.getByRole('button', { name: /Sei un ospite/ }).click()
+    await expect(page.getByPlaceholder('tua@email.com')).toBeVisible()
+  })
   test('guest magic-link form is available', async ({ page }) => {
     await page.goto('/login')
-    await page.getByRole('button', { name: /Sei un ospite/ }).click()
     await expect(page.getByPlaceholder('tua@email.com')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Invia magic link' })).toBeDisabled()
   })
   test('magic link sent through SMTP signs in via the public callback', async ({ page, request }) => {
     const email = `e2e-user-${fixtures().suffix}@humans.tech`
     await page.goto('/login')
-    await page.getByRole('button', { name: /Sei un ospite/ }).click()
     await page.getByPlaceholder('tua@email.com').fill(email)
     await page.getByRole('button', { name: 'Invia magic link' }).click()
     await expect(page.getByRole('heading', { name: 'Controlla la tua email' })).toBeVisible()

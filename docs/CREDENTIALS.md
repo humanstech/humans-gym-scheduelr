@@ -3,9 +3,20 @@
 Il dominio è `https://gym.humans.tech`. Il primo amministratore è
 `marco.ciotoli@humans.tech`. Non occorre un account Supabase cloud.
 
-Servono due configurazioni per le funzioni di login già presenti: Google OAuth
-per l’accesso aziendale e un server SMTP per i link di accesso degli ospiti.
+Il primo avvio può usare soltanto i link email, con `GOOGLE_ENABLED=false`.
+Google OAuth si abilita dopo avere configurato client ID e secret; il pulsante
+di accesso segue automaticamente le impostazioni del backend.
 I backup automatici e S3 sono disabilitati su richiesta del proprietario.
+
+## URL pubblici per Google
+
+- Homepage: `https://gym.humans.tech/login`
+- Privacy policy: `https://gym.humans.tech/privacy`
+- Termini: `https://gym.humans.tech/terms`
+- Cookie policy: `https://gym.humans.tech/cookies`
+
+Le pagine legali sono pubbliche e leggibili anche senza JavaScript. La cookie
+policy non sostituisce il campo privacy policy richiesto da Google.
 
 ## 1. Google OAuth
 
@@ -63,7 +74,8 @@ al server SMTP.
 Modificare **`.env.production.local` nella radice del progetto sul Mac**.
 È escluso da Git e dal contesto Docker, con permessi 600. Vi sono già le chiavi
 applicative generate: compilare solo `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
-e `SMTP_PASS` (API key Resend). Il mittente è `gym@services.humans.tech`.
+e `SMTP_PASS` (API key Resend). Per abilitare Google impostare anche
+`GOOGLE_ENABLED=true`. Il mittente è `gym@services.humans.tech`.
 
 Non serve accedere al server: dopo il salvataggio l’agente sincronizza questo
 stesso file via SSH in **`/opt/gym/.env`**, root, permessi 600. Non inviarlo in chat

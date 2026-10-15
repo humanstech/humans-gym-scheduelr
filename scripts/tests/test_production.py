@@ -43,6 +43,17 @@ class DeploymentPolicyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_production(make_env.generate())
 
+    def test_email_only_launch_does_not_require_google_credentials(self):
+        env = make_env.generate()
+        env.update(GOOGLE_ENABLED='false', SMTP_PASS='smtp-test')
+        validate_production(env)
+
+    def test_enabling_google_requires_both_credentials(self):
+        env = make_env.generate()
+        env.update(SMTP_PASS='smtp-test')
+        with self.assertRaisesRegex(ValueError, 'GOOGLE_CLIENT_ID'):
+            validate_production(env)
+
     def test_each_installation_gets_different_secrets(self):
         a, b = make_env.generate(), make_env.generate()
         for key in ['POSTGRES_PASSWORD', 'JWT_SECRET', 'ANON_KEY', 'SERVICE_ROLE_KEY', 'REALTIME_DB_ENC_KEY']:

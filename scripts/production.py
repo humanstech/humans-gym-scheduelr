@@ -44,15 +44,17 @@ def request_json(url, token=None):
 def validate_production(env):
     required = ['ADMIN_EMAIL', 'POSTGRES_PASSWORD', 'JWT_SECRET', 'ANON_KEY', 'SERVICE_ROLE_KEY',
                 'REALTIME_DB_ENC_KEY', 'SECRET_KEY_BASE', 'SMTP_HOST', 'SMTP_USER', 'SMTP_PASS',
-                'SMTP_FROM', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET']
+                'SMTP_FROM']
     missing = [key for key in required if not env.get(key)]
     if missing:
         raise ValueError('Complete production settings: ' + ', '.join(missing))
     for domain, url in [('APP_DOMAIN', 'SITE_URL'), ('APP_DOMAIN', 'SUPABASE_PUBLIC_URL')]:
         if not re.fullmatch(r'[a-zA-Z0-9.-]+', env.get(domain, '')) or env.get(url) != 'https://' + env[domain]:
             raise ValueError(f'{domain} must match the HTTPS {url}')
-    if env.get('GOOGLE_ENABLED') != 'true':
-        raise ValueError('Enable Google OAuth before production')
+    if env.get('GOOGLE_ENABLED') not in ('true', 'false'):
+        raise ValueError('GOOGLE_ENABLED must be true or false')
+    if env.get('GOOGLE_ENABLED') == 'true' and not all(env.get(k) for k in ('GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET')):
+        raise ValueError('Google OAuth enabled: complete GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET')
     if env.get('GYM_PORT') != '18200' or env.get('APP_DOMAIN') != 'gym.humans.tech':
         raise ValueError('This installation is assigned gym.humans.tech on loopback port 18200')
     if env.get('BACKUP_BEFORE_DEPLOY', 'false') not in ('true', 'false'):

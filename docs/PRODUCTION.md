@@ -114,7 +114,9 @@ sudo bash scripts/bootstrap-ec2.sh
 ```
 
 Crea solo directory Gym, file env se assente e unità `gym-*`. I timer restano
-spenti. Completare/sincronizzare il file env, trasferire il bundle main, quindi:
+spenti. Completare/sincronizzare il file env, trasferire il bundle main, quindi procedere con i comandi seguenti.
+Il primo avvio può usare soltanto email (`GOOGLE_ENABLED=false`) mentre si
+completa la pubblicazione OAuth:
 
 ```bash
 sudo bash scripts/publish-edge.sh
@@ -140,7 +142,7 @@ migrazioni DB restano applicate. Usare solo migrazioni compatibili con la releas
 precedente. Sul primo bootstrap fallito non esiste una release precedente.
 Un fallimento registra lo SHA e impedisce tentativi ripetuti dal timer.
 
-Dopo avere verificato login, email e realtime:
+Dopo avere verificato il servizio:
 
 ```bash
 sudo systemctl enable --now gym-deploy.timer

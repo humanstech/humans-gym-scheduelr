@@ -20,6 +20,13 @@
   handle /healthz {
     respond "ok" 200
   }
+  @legal path /terms /privacy /cookies
+  handle @legal {
+    root * /srv
+    rewrite * {path}.html
+    header Cache-Control "no-cache"
+    file_server
+  }
   @api path /auth/v1/* /rest/v1/* /realtime/v1/*
   handle @api {
     reverse_proxy gateway:8000 {
