@@ -2,11 +2,41 @@
 
 **Online: https://gym.humans.tech**
 
-Release di produzione: `476af9661b44e8d50845b4dfcbceb6141922d10b`, merge
-della [PR #3](https://github.com/humanstech/humans-gym-scheduelr/pull/3) su
-`main`. La [CI del commit](https://github.com/humanstech/humans-gym-scheduelr/actions/runs/38768579401)
-è riuscita. `/version.json`, `/opt/gym/current` e lo stato del deploy indicano
-lo stesso SHA. Le pagine legali erano state integrate con la PR #2.
+Release di produzione: `aad2cf45da19d2da4209b15f1d87237c6df99c0a`, merge
+della [PR #5](https://github.com/humanstech/humans-gym-scheduelr/pull/5) su
+`main`. Include la [PR #4](https://github.com/humanstech/humans-gym-scheduelr/pull/4):
+Personal Trainer, wallet e accesso rapido locale. La CI di `main` è riuscita.
+`/version.json` e lo stato del deploy indicano lo stesso SHA. Release precedente,
+disponibile per il rollback: `476af9661b44e8d50845b4dfcbceb6141922d10b`.
+
+## Aggiornamento Personal Trainer (15 ottobre 2026)
+
+Verificato in produzione:
+
+- Il bundle ARM64 è stato costruito sul Mac. L'immagine web non contiene il
+  pannello di accesso rapido né i profili di prova, e punta a `gym.humans.tech`.
+- Bundle trasferito con `upload-bundle.py`; il timer ha fatto il deploy in circa 3 minuti.
+- Sei container healthy dopo l'aggiornamento.
+- Migrazioni `202610150004_personal_trainer` e `202610150005_pt_jobs` applicate.
+- Job `gym-pt-reconcile` registrato (ogni 5 minuti).
+- `gym-cancel-underfilled`, modificato dalla migrazione, termina con successo.
+- Slot e prenotazioni esistenti invariati.
+- Nessun dato PT presente: la funzione resta invisibile finché un admin non
+  marca le fasce PT e attiva gli iscritti.
+- I dati demo di `supabase/dev/` non vengono eseguiti in produzione.
+
+Verificato in locale prima del rilascio:
+
+- Test SQL: 11 esistenti e 25 nuovi sul PT.
+- Test degli script: 33.
+- Playwright: 19/19.
+- Flussi PT provati nel browser con tutti i profili.
+
+Non eseguito:
+
+- Nessun backup manuale prima della migrazione, per scelta del proprietario
+  (backup disabilitati). La migrazione è additiva e transazionale.
+- Il primo accesso reale del trainer via magic link non è ancora provato.
 
 ## Verificato realmente in produzione
 

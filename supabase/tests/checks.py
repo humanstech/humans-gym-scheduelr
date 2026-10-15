@@ -22,7 +22,7 @@ def sql(statement, user=None, ok=True):
 
 class DatabaseChecks(unittest.TestCase):
     def setUp(self):
-        sql("TRUNCATE public.bookings, public.slots, public.space_time_slots, public.spaces, auth.users, public.admins, public.allowed_domains, public.allowed_emails CASCADE;")
+        sql("TRUNCATE public.bookings, public.slots, public.space_time_slots, public.spaces, auth.users, public.admins, public.pt_trainers, public.allowed_domains, public.allowed_emails CASCADE;")
         sql("INSERT INTO public.allowed_domains(domain) VALUES ('humans.tech'); INSERT INTO public.admins(email) VALUES ('admin@humans.tech');")
         self.users = [(str(uuid.uuid4()), f'user{i}@humans.tech') for i in range(3)]
         self.admin = (str(uuid.uuid4()), 'admin@humans.tech')
@@ -40,6 +40,37 @@ class DatabaseChecks(unittest.TestCase):
     def test_admin_policy_does_not_recurse(self):
         self.assertEqual(sql('SELECT public.is_admin()', self.admin).stdout.strip(), 't')
         self.assertEqual(sql('SELECT count(*) FROM public.admins', self.users[0]).stdout.strip(), '0')
+
+    def test_admin_can_promote_existing_user_idempotently(self):
+        user = self.users[0]
+        sql(f"UPDATE auth.users SET email=upper(email) WHERE id='{user[0]}'")
+        for _ in range(2):
+            sql(f"SELECT public.admin_promote_user('{user[0]}')", self.admin)
+        self.assertEqual(sql(f"SELECT count(*) FROM public.admins WHERE email='{user[1]}'").stdout.strip(), '1')
+        self.assertEqual(sql('SELECT public.is_admin()', user).stdout.strip(), 't')
+        self.assertEqual(sql(f"SELECT is_admin FROM public.admin_list_users() WHERE user_id='{user[0]}'", self.admin).stdout.strip(), 't')
+        # The new admin can actually perform admin operations.
+        sql(f"SELECT public.admin_promote_user('{self.users[1][0]}')", user)
+        self.assertEqual(sql('SELECT public.is_admin()', self.users[1]).stdout.strip(), 't')
+
+    def test_promotion_requires_admin_and_cannot_be_bypassed(self):
+        user = self.users[0]
+        statement = f"SELECT public.admin_promote_user('{user[0]}')"
+        denied = sql(statement, user, False)
+        self.assertNotEqual(denied.returncode, 0)
+        self.assertIn('Admin required', denied.stderr)
+        sql(f"INSERT INTO public.pt_trainers(email) VALUES ('{user[1]}')")
+        self.assertNotEqual(sql(statement, user, False).returncode, 0)
+        self.assertNotEqual(sql(f'SET ROLE anon; {statement}', ok=False).returncode, 0)
+        self.assertNotEqual(sql(f"INSERT INTO public.admins(email) VALUES ('{user[1]}')", user, False).returncode, 0)
+        self.assertEqual(sql('SELECT public.is_admin()', user).stdout.strip(), 'f')
+
+    def test_admin_cannot_promote_missing_user(self):
+        for target in [f"'{uuid.uuid4()}'", 'NULL']:
+            denied = sql(f'SELECT public.admin_promote_user({target})', self.admin, False)
+            self.assertNotEqual(denied.returncode, 0)
+            self.assertIn('User not found', denied.stderr)
+        self.assertEqual(sql('SELECT count(*) FROM public.admins').stdout.strip(), '1')
 
     def test_signup_and_revocation_are_enforced_in_database(self):
         denied = sql(f"INSERT INTO auth.users(id,email) VALUES ('{uuid.uuid4()}','stranger@elsewhere.test')", ok=False)

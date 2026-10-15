@@ -14,6 +14,7 @@ import { displayName } from '@/components/admin/ptFormat'
 import { UserAvatar } from './UserAvatar'
 import { MembershipSection } from './MembershipSection'
 import { WalletSection } from './WalletSection'
+import { AdminRoleSection } from './AdminRoleSection'
 
 interface UserDetailSheetProps {
   userId: string | null
@@ -65,6 +66,7 @@ export function UserDetailSheet({ userId, onOpenChange }: UserDetailSheetProps) 
 
         {user && (
           <div key={user.user_id} className="space-y-8 p-4">
+            <AdminRoleSection user={user} />
             <MembershipSection userId={user.user_id} />
             <WalletSection
               userId={user.user_id}
