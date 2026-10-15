@@ -2,12 +2,31 @@
 
 **Online: https://gym.humans.tech**
 
-Release di produzione: `aad2cf45da19d2da4209b15f1d87237c6df99c0a`, merge
-della [PR #5](https://github.com/humanstech/humans-gym-scheduelr/pull/5) su
-`main`. Include la [PR #4](https://github.com/humanstech/humans-gym-scheduelr/pull/4):
-Personal Trainer, wallet e accesso rapido locale. La CI di `main` è riuscita.
+Release di produzione: `4cba831a2cdbd3980f5cda34162e5768bb981f00`, merge
+della [PR #6](https://github.com/humanstech/humans-gym-scheduelr/pull/6) su
+`main`: promozione degli utenti ad amministratore. La CI di `main` è riuscita.
 `/version.json` e lo stato del deploy indicano lo stesso SHA. Release precedente,
-disponibile per il rollback: `476af9661b44e8d50845b4dfcbceb6141922d10b`.
+disponibile per il rollback: `aad2cf45da19d2da4209b15f1d87237c6df99c0a`.
+
+## Promozione ad amministratore (15 ottobre 2026, 23:43 CEST)
+
+Verificato in produzione:
+
+- Deploy completato dal servizio `gym-deploy` dopo CI e verifica del bundle ARM64.
+- Sei container healthy; HTTPS `/healthz`, versione frontend, Auth e REST verificati.
+- Migrazione `202610150006_admin_promote_user` applicata con checksum identico al sorgente.
+- RPC disponibile: una chiamata anonima viene rifiutata con HTTP 401 e codice `42501`.
+- Il numero di amministratori resta uno: nessun utente reale promosso durante il rilascio.
+- Immagine frontend verificata: contiene «Rendi admin», punta al backend di
+  produzione ed esclude il pannello di accesso rapido locale.
+- Rimosso dal server il precedente archivio di trasferimento per rispettare la
+  riserva di spazio del deploy. La copia sul Mac è stata verificata tramite SHA-256;
+  release e immagini necessarie al rollback sono conservate sul server.
+
+Verificato in locale: lint, build, 39 test SQL, 33 test degli script e 5 test
+Playwright, inclusi setup e teardown. Il test browser verifica annullamento,
+conferma, persistenza del ruolo e accesso amministrativo dell'utente promosso.
+La promozione di un account reale in produzione non è stata eseguita.
 
 ## Aggiornamento Personal Trainer (15 ottobre 2026)
 
