@@ -24,37 +24,42 @@ export function Login() {
     staleTime: 60_000,
   })
   const [error, setError] = useState<string | null>(null)
-  const [signing, setSigning] = useState(false)
-  const [guestMode, setGuestMode] = useState(false)
-  const [guestEmail, setGuestEmail] = useState('')
+  const [signing, setSigning] = useState<'google' | 'email' | null>(null)
+  const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
 
   const handleGoogleSignIn = useCallback(async () => {
-    setSigning(true)
+    setSigning('google')
     setError(null)
-    const err = await signIn()
-    if (err) setError('Errore durante il login. Riprova.')
-    setSigning(false)
+    try {
+      const err = await signIn()
+      if (err) throw err
+    } catch {
+      setError('Errore durante il login con Google. Riprova.')
+    } finally {
+      setSigning(null)
+    }
   }, [signIn])
 
   const handleMagicLink = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!guestEmail.trim()) return
-    setSigning(true)
+    if (!email.trim()) return
+    setSigning('email')
     setError(null)
-    const err = await signInWithMagicLink(guestEmail.trim())
-    if (err) {
-      setError('Email non autorizzata o errore nell\'invio. Contatta un amministratore.')
-    } else {
+    try {
+      const err = await signInWithMagicLink(email.trim())
+      if (err) throw err
       setSent(true)
+    } catch {
+      setError('Email non autorizzata o errore nell\'invio. Contatta un amministratore.')
+    } finally {
+      setSigning(null)
     }
-    setSigning(false)
-  }, [guestEmail, signInWithMagicLink])
+  }, [email, signInWithMagicLink])
 
   const handleBackToLogin = useCallback(() => {
-    setGuestMode(false)
     setSent(false)
-    setGuestEmail('')
+    setEmail('')
     setError(null)
   }, [])
 
@@ -85,97 +90,89 @@ export function Login() {
         </div>
 
         <div className="rounded-xl border bg-card p-8 shadow-sm space-y-6 text-center">
-          {!guestMode && googleEnabled ? (
-            <>
-              <div>
-                <h2 className="text-lg font-semibold">Accesso riservato</h2>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Accesso riservato agli utenti autorizzati.
-                  <br />
-                  Usa il tuo account Google per accedere.
-                </p>
-              </div>
-
-              {error && (
-                <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  {error}
-                </div>
-              )}
-
-              <Button
-                variant="outline"
-                onClick={handleGoogleSignIn}
-                disabled={signing}
-                className="w-full gap-2"
-                size="lg"
-              >
-                {signing ? (
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-foreground border-t-transparent" />
-                ) : (
-                  <GoogleIcon className="h-4 w-4" />
-                )}
-                Accedi con Google
-              </Button>
-
-              <button
-                onClick={() => setGuestMode(true)}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Sei un ospite? <span className="font-semibold">Accedi qui</span>
-              </button>
-            </>
-          ) : sent ? (
+          {sent ? (
             <>
               <div className="flex flex-col items-center gap-3">
                 <CheckCircle className="h-10 w-10 text-primary" />
                 <h2 className="text-lg font-semibold">Controlla la tua email</h2>
                 <p className="text-sm text-muted-foreground">
-                  Abbiamo inviato un link di accesso a <span className="font-medium text-foreground">{guestEmail}</span>.
+                  Abbiamo inviato un link di accesso a <span className="font-medium text-foreground">{email}</span>.
                   <br />
                   Clicca il link per accedere.
                 </p>
               </div>
-              {googleEnabled && <button
+              <button
                 onClick={handleBackToLogin}
                 className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mx-auto"
               >
                 <ArrowLeft className="h-3 w-3" />
                 Torna al login
-              </button>}
+              </button>
             </>
           ) : (
             <>
               <div>
-                <h2 className="text-lg font-semibold">{googleEnabled ? 'Accesso ospite' : 'Accedi a Gym'}</h2>
+                <h2 className="text-lg font-semibold">Accedi a Gym</h2>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Inserisci la tua email. Ti invieremo un link di accesso diretto.
+                  Accesso riservato agli utenti autorizzati.
                 </p>
               </div>
 
               {error && (
-                <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <div role="alert" className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                   <AlertCircle className="h-4 w-4 shrink-0" />
                   {error}
                 </div>
               )}
 
+              {googleEnabled && (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={handleGoogleSignIn}
+                    disabled={signing !== null}
+                    className="w-full gap-2"
+                    size="lg"
+                  >
+                    {signing === 'google' ? (
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-foreground border-t-transparent" />
+                    ) : (
+                      <GoogleIcon className="h-4 w-4" />
+                    )}
+                    Accedi con Google
+                  </Button>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <div className="h-px flex-1 bg-border" />
+                    <span>oppure con email</span>
+                    <div className="h-px flex-1 bg-border" />
+                  </div>
+                </>
+              )}
+
               <form onSubmit={handleMagicLink} className="space-y-3">
+                <label htmlFor="login-email" className="block text-left text-sm font-medium">Email</label>
                 <Input
+                  id="login-email"
+                  name="email"
+                  autoComplete="email"
                   type="email"
                   placeholder="tua@email.com"
-                  value={guestEmail}
-                  onChange={e => setGuestEmail(e.target.value)}
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
                   required
-                  autoFocus
+                  disabled={signing !== null}
+                  aria-describedby="magic-link-description"
                 />
+                <p id="magic-link-description" className="text-left text-xs text-muted-foreground">
+                  Ti invieremo un link per accedere, senza password.
+                </p>
                 <Button
                   type="submit"
-                  disabled={signing || !guestEmail.trim()}
+                  disabled={signing !== null || !email.trim()}
                   className="w-full gap-2"
                   size="lg"
                 >
-                  {signing ? (
+                  {signing === 'email' ? (
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
                   ) : (
                     <Mail className="h-4 w-4" />
@@ -183,14 +180,6 @@ export function Login() {
                   Invia magic link
                 </Button>
               </form>
-
-              {googleEnabled && <button
-                onClick={handleBackToLogin}
-                className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mx-auto"
-              >
-                <ArrowLeft className="h-3 w-3" />
-                Torna al login
-              </button>}
             </>
           )}
         </div>

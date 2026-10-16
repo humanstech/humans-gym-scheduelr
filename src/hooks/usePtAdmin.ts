@@ -1,16 +1,22 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import type { Database, Tables } from '@/lib/database.types'
+import type { TrainerSessionDetails } from './useTrainerWallet'
 
 type Fns = Database['public']['Functions']
 export type AdminUser = Fns['admin_list_users']['Returns'][number]
 export type LowBalance = Fns['pt_low_balances']['Returns'][number]
-export type AdminSession = Fns['pt_admin_sessions']['Returns'][number]
+export type AdminSession = Fns['pt_admin_sessions']['Returns'][number] & { trainer: TrainerSessionDetails | null }
 export type PtSettings = Tables<'pt_settings'>
 export type PtMembership = Tables<'pt_memberships'>
 export type PtTrainer = Tables<'pt_trainers'>
 
 const PT_ERRORS: [string, string][] = [
+  ['Trainer required', 'Seleziona un trainer. Per le sedute programmate, configura il trainer predefinito.'],
+  ['Trainer rate required', 'Configura prima il compenso sull’account del trainer'],
+  ['Reason required', 'Inserisci un motivo o una nota'],
+  ['Invalid payment date', 'La data del pagamento non può essere futura'],
+  ['Session already exists', 'Questa seduta PT esiste già'],
   ['Membership overlap', "Il periodo si sovrappone a un'altra iscrizione"],
   ['Slot has incompatible bookings', 'Lo slot ha prenotazioni di persone non iscritte al PT o oltre la capienza'],
   ['Invalid amount', 'Importo non valido'],
@@ -98,11 +104,17 @@ export function useAdminSessions(from: string, to: string) {
   return useQuery({
     queryKey: ['pt-admin', 'sessions', from, to],
     queryFn: async (): Promise<AdminSession[]> => {
-      const { data, error } = await supabase.rpc('pt_admin_sessions', { from_date: from, to_date: to })
-      if (error) throw error
-      return data ?? []
+      const [sessions, trainers] = await Promise.all([
+        supabase.rpc('pt_admin_sessions', { from_date: from, to_date: to }),
+        supabase.rpc('pt_trainer_session_details', { from_date: from, to_date: to }),
+      ])
+      if (sessions.error) throw sessions.error
+      if (trainers.error) throw trainers.error
+      const bySlot = new Map((trainers.data ?? []).map(t => [t.slot_id, t]))
+      return (sessions.data ?? []).map(s => ({ ...s, trainer: bySlot.get(s.slot_id) ?? null }))
     },
     placeholderData: prev => prev,
+    refetchInterval: 60_000,
   })
 }
 
@@ -217,8 +229,8 @@ export function useRestoreSession() {
 }
 
 export function useCreateSession() {
-  return usePtMutation(async (slotId: string) => {
-    const { error } = await supabase.rpc('pt_create_session', { slot_id: slotId })
+  return usePtMutation(async (args: Fns['pt_create_assigned_session']['Args']) => {
+    const { error } = await supabase.rpc('pt_create_assigned_session', args)
     if (error) throw error
   })
 }
@@ -258,8 +270,8 @@ export function useUpdatePtSettings() {
 }
 
 export function useAddTrainer() {
-  return usePtMutation(async (email: string) => {
-    const { error } = await supabase.from('pt_trainers').insert({ email })
+  return usePtMutation(async (args: { email: string; fee_cents: number }) => {
+    const { error } = await supabase.rpc('pt_add_trainer', args)
     if (error) throw error
   })
 }

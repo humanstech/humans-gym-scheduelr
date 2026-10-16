@@ -12,6 +12,8 @@ import { ExclusionsDialog } from './ExclusionsDialog'
 import { PayersDialog } from './PayersDialog'
 import { AddSessionDialog } from './AddSessionDialog'
 import type { SessionAction } from './SessionRow'
+import { SessionTrainerDialog } from './SessionTrainerDialog'
+import { useTrainerAccounts } from '@/hooks/useTrainerWallet'
 
 const weekStartOf = (d: Date) => startOfWeek(d, { weekStartsOn: 1 })
 
@@ -25,6 +27,8 @@ export function WeekSessions() {
   const [weekStart, setWeekStart] = useState(() => weekStartOf(new Date()))
   const [action, setAction] = useState<{ kind: SessionAction; slotId: string } | null>(null)
   const [addOpen, setAddOpen] = useState(false)
+  const [trainerFilter, setTrainerFilter] = useState('all')
+  const { data: trainers = [] } = useTrainerAccounts()
   const from = format(weekStart, 'yyyy-MM-dd')
   const to = format(endOfWeek(weekStart, { weekStartsOn: 1 }), 'yyyy-MM-dd')
   const { data: sessions = [], isLoading, isFetching, isError } = useAdminSessions(from, to)
@@ -33,6 +37,7 @@ export function WeekSessions() {
 
   const days = new Map<string, AdminSession[]>()
   ;[...sessions]
+    .filter(s => trainerFilter === 'all' || (trainerFilter === 'unassigned' ? !s.trainer : s.trainer?.trainer_id === trainerFilter))
     .sort((a, b) => (a.date + a.start_time).localeCompare(b.date + b.start_time))
     .forEach(s => days.set(s.date, [...(days.get(s.date) ?? []), s]))
 
@@ -52,7 +57,7 @@ export function WeekSessions() {
         </Button>
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-1">
         <Button size="icon-sm" variant="ghost" onClick={() => setWeekStart(w => addWeeks(w, -1))} aria-label="Settimana precedente">
           <ChevronLeft />
         </Button>
@@ -71,6 +76,11 @@ export function WeekSessions() {
         >
           Oggi
         </Button>
+        <select aria-label="Filtra sedute per trainer" value={trainerFilter} onChange={e => setTrainerFilter(e.target.value)} className="ml-auto h-9 max-w-full rounded-md border border-input bg-background px-2 text-sm">
+          <option value="all">Tutti i trainer</option>
+          <option value="unassigned">Da assegnare</option>
+          {trainers.map(t => <option key={t.trainer_id} value={t.trainer_id}>{t.email}</option>)}
+        </select>
       </div>
 
       {isLoading ? (
@@ -102,6 +112,7 @@ export function WeekSessions() {
       {target && action?.kind === 'void' && <VoidSessionDialog session={target} onClose={closeAction} />}
       {target && action?.kind === 'exclude' && <ExclusionsDialog session={target} onClose={closeAction} />}
       {target && action?.kind === 'payers' && <PayersDialog session={target} onClose={closeAction} />}
+      {target && action?.kind === 'trainer' && <SessionTrainerDialog key={target.slot_id} session={target} onClose={closeAction} />}
 
       <AddSessionDialog
         open={addOpen}

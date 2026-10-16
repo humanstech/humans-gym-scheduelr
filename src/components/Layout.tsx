@@ -12,7 +12,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useAuth } from '@/hooks/useAuth'
 import { useIsAdmin } from '@/hooks/useIsAdmin'
-import { useTrainerMode } from '@/hooks/useRoles'
+import { useIsTrainer, useTrainerMode } from '@/hooks/useRoles'
 import { isLowBalance, usePtStatus } from '@/hooks/usePersonalTrainer'
 import { formatEUR } from '@/lib/money'
 import { LegalLinks } from '@/components/LegalLinks'
@@ -26,19 +26,21 @@ export function Layout({ children }: LayoutProps) {
   const { user, signOut } = useAuth()
   const { data: isAdmin } = useIsAdmin(user?.email)
   const { isTrainerOnly } = useTrainerMode()
+  const { data: isTrainer } = useIsTrainer()
   const { data: ptStatus } = usePtStatus()
   const location = useLocation()
 
   const showWallet = !isTrainerOnly && !!ptStatus && (ptStatus.is_member || ptStatus.ever_member)
 
   const navLinks = useMemo(() => isTrainerOnly
-    ? [{ to: '/', label: 'Sedute', icon: Dumbbell }]
+    ? [{ to: '/', label: 'Sedute', icon: Dumbbell }, { to: '/trainer-wallet', label: 'Compensi PT', icon: Wallet }]
     : [
         { to: '/', label: 'Dashboard', icon: LayoutDashboard },
         { to: '/my-bookings', label: 'Le mie prenotazioni', icon: Calendar },
         ...(showWallet ? [{ to: '/wallet', label: 'Wallet', icon: Wallet }] : []),
+        ...(isTrainer ? [{ to: '/trainer-wallet', label: 'Compensi PT', icon: Wallet }] : []),
         ...(isAdmin ? [{ to: '/admin', label: 'Admin', icon: ShieldCheck }] : []),
-      ], [isAdmin, isTrainerOnly, showWallet])
+      ], [isAdmin, isTrainerOnly, isTrainer, showWallet])
 
   const navigate = useNavigate()
   const initials = user?.user_metadata?.full_name

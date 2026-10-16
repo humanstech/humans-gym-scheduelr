@@ -17,6 +17,9 @@ import {
 import { cn } from '@/lib/utils'
 import { ptErrorMessage, useConvertibleSlots, useCreateSession } from '@/hooks/usePtAdmin'
 import { fmtTime, formatDay, todayISO } from '@/components/admin/ptFormat'
+import { useTrainerAccounts, useTrainerDefaults } from '@/hooks/useTrainerWallet'
+import { parseEURToCents } from '@/lib/money'
+import { SessionTrainerFields } from './SessionTrainerFields'
 
 interface Props {
   open: boolean
@@ -31,6 +34,14 @@ export function AddSessionDialog({ open, onOpenChange, onCreated }: Props) {
   const [slotId, setSlotId] = useState<string | null>(null)
   const { data: slots = [], isLoading } = useConvertibleSlots(open && date >= today ? date : null)
   const create = useCreateSession()
+  const { data: trainers = [] } = useTrainerAccounts()
+  const { data: defaults } = useTrainerDefaults()
+  const [selectedTrainer, setSelectedTrainer] = useState<string | null>(null)
+  const [selectedFee, setSelectedFee] = useState<string | null>(null)
+  const trainerId = selectedTrainer ?? defaults?.default_trainer_id ?? ''
+  const rate = trainers.find(t => t.trainer_id === trainerId)?.default_fee_cents
+  const fee = selectedFee ?? (rate === null || rate === undefined ? '' : String(rate / 100))
+  const cents = parseEURToCents(fee)
 
   const nowTime = format(new Date(), 'HH:mm:ss')
   const available = slots.filter(s => date > today || s.start_time > nowTime)
@@ -39,13 +50,15 @@ export function AddSessionDialog({ open, onOpenChange, onCreated }: Props) {
     if (!next) {
       setDate(todayISO())
       setSlotId(null)
+      setSelectedTrainer(null)
+      setSelectedFee(null)
     }
     onOpenChange(next)
   }
 
   const handleCreate = () => {
-    if (!slotId) return
-    create.mutate(slotId, {
+    if (!slotId || !trainerId || cents === null || cents < 0) return
+    create.mutate({ slot_id: slotId, trainer_id: trainerId, fee_cents: cents }, {
       onSuccess: () => {
         toast.success('Seduta PT aggiunta')
         onCreated?.(date)
@@ -56,7 +69,7 @@ export function AddSessionDialog({ open, onOpenChange, onCreated }: Props) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={next => { if (!create.isPending) handleOpenChange(next) }}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Aggiungi seduta PT</DialogTitle>
@@ -118,9 +131,11 @@ export function AddSessionDialog({ open, onOpenChange, onCreated }: Props) {
           )}
         </fieldset>
 
+        <SessionTrainerFields trainers={trainers} trainerId={trainerId} fee={fee} onTrainerChange={setSelectedTrainer} onFeeChange={setSelectedFee} />
+
         <DialogFooter>
-          <DialogClose render={<Button type="button" variant="outline" />}>Annulla</DialogClose>
-          <Button onClick={handleCreate} disabled={!slotId || create.isPending}>
+          <DialogClose disabled={create.isPending} render={<Button type="button" variant="outline" />}>Annulla</DialogClose>
+          <Button onClick={handleCreate} disabled={!slotId || !trainerId || cents === null || cents < 0 || create.isPending}>
             {create.isPending ? 'Conversione…' : 'Aggiungi seduta'}
           </Button>
         </DialogFooter>

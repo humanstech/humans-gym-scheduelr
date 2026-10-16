@@ -12,6 +12,7 @@ import { SpaceBookingView } from '@/components/dashboard/SpaceBookingView'
 import { Admin } from '@/pages/Admin'
 import { Wallet } from '@/pages/Wallet'
 import { TrainerHome } from '@/pages/TrainerHome'
+import { TrainerWallet } from '@/pages/TrainerWallet'
 import { useAuth } from '@/hooks/useAuth'
 import { useTrainerMode } from '@/hooks/useRoles'
 
@@ -111,6 +112,10 @@ export default function App() {
                 </Layout>
               </AuthGuard>
             }
+          />
+          <Route
+            path="/trainer-wallet"
+            element={<AuthGuard><Layout><TrainerWallet /></Layout></AuthGuard>}
           />
           <Route
             path="/admin"
