@@ -29,6 +29,17 @@ BEGIN
   members := array_remove(ARRAY[admin_id, anna, luca, sara], NULL);
   IF cardinality(members) = 0 THEN RETURN; END IF;
   INSERT INTO public.pt_trainers(email) VALUES ('trainer.pt@example.com') ON CONFLICT (email) DO NOTHING;
+  INSERT INTO public.pt_trainer_rates(trainer_id, fee_cents)
+  SELECT id, 4000 FROM public.pt_trainers WHERE email = 'trainer.pt@example.com'
+  ON CONFLICT (trainer_id) DO NOTHING;
+  UPDATE public.pt_trainer_settings SET default_trainer_id =
+    (SELECT id FROM public.pt_trainers WHERE email = 'trainer.pt@example.com')
+  WHERE default_trainer_id IS NULL;
+  INSERT INTO public.pt_session_trainers(slot_id, trainer_id, fee_cents)
+  SELECT p.slot_id, t.id, 4000 FROM public.pt_sessions p
+  JOIN public.slots s ON s.id = p.slot_id
+  CROSS JOIN public.pt_trainers t WHERE s.space_id = gym AND t.email = 'trainer.pt@example.com'
+  ON CONFLICT (slot_id) DO NOTHING;
 
   -- Open-ended memberships from 30 days ago; 50€ top-up each.
   INSERT INTO public.pt_memberships(user_id, valid_from, note)

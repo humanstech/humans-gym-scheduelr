@@ -10,8 +10,8 @@ fonte di verità per accessi e calcoli; il frontend non calcola importi.
   Le iscrizioni sono a periodi non sovrapposti: chiudere un periodo non
   cancella lo storico e si può riaprirne uno nuovo in futuro.
 - **Trainer**: ruolo esterno (`pt_trainers`, per email come `admins`). Ha accesso
-  all'app (anche fuori dai domini ammessi) ma vede solo le sedute PT e chi è
-  prenotato. Non prenota e non vede importi.
+  all'app (anche fuori dai domini ammessi) ma vede solo le sedute PT assegnate
+  a lui e chi è prenotato. Non prenota e non vede importi.
 - **Seduta PT**: uno slot di uno spazio esistente (es. Palestra) riservato al PT
   (`pt_sessions.status = 'active'`). Capienza = `pt_settings.max_participants`
   (4); prenotabile solo dagli iscritti PT attivi in quella data. Non viene mai
@@ -81,6 +81,73 @@ un ricalcolo, con motivo).
   saldo può essere negativo; nessun blocco delle prenotazioni.
 
 ## Contratto dati
+
+### Compensi e pagamenti dei trainer
+
+I partecipanti pagano la cassa tramite i wallet descritti sopra. La cassa paga
+i trainer tramite un registro separato: gli incassi e le ripartizioni dei
+partecipanti non determinano il compenso del trainer.
+
+- L'admin configura il **compenso per seduta sulla riga dell'account trainer**.
+  L'importo viene copiato nella seduta quando viene creata; le modifiche al
+  compenso dell'account valgono solo per le nuove sedute.
+- Ogni nuova seduta PT deve avere un trainer. Nelle sedute singole l'admin
+  sceglie trainer e compenso; le sedute programmate usano il trainer predefinito
+  e il suo compenso. Finché il predefinito non è configurato, la generazione
+  salta le nuove fasce PT e continua a generare quelle ordinarie.
+- Il compenso fisso matura **alla fine della singola seduta**, nel fuso
+  Europe/Rome, anche senza partecipanti. Una seduta annullata non matura compensi.
+  Non si attende la chiusura dell'intera giornata usata dai wallet partecipanti.
+- L'admin può cambiare trainer o importo anche per una seduta conclusa, indicando
+  un motivo. Gli importi già maturati vengono rettificati con nuovi movimenti;
+  il cambio di trainer storna il debito sul vecchio account e lo attribuisce al nuovo.
+- I pagamenti sono **versamenti liberi**, anche parziali o anticipati, con data,
+  metodo (bonifico, contanti, altro) e nota/riferimento obbligatori. Registrano
+  denaro già versato; l'app non dispone trasferimenti. Una richiesta ripetuta
+  con lo stesso identificativo non duplica il pagamento.
+- Ogni conto mostra **maturato, pagato e residuo da pagare**. Un saldo negativo
+  è mostrato come anticipo. Un pagamento errato può essere stornato con motivo:
+  il pagamento originale resta nel registro e lo storno può avvenire una sola volta.
+- Importi e movimenti dei trainer sono visibili e gestibili solo dagli admin.
+  Un trainer con sedute assegnate o movimenti non può essere eliminato.
+
+**Storico esistente:** la migrazione non attribuisce trainer né inventa compensi
+per il passato. Le sedute precedenti compaiono come «Trainer da assegnare» e sono
+filtrabili. Dopo l'assegnazione esplicita di trainer e importo, una seduta passata
+non annullata entra subito nel conto. La prima configurazione del predefinito
+assegna anche le sedute future ancora senza trainer e genera/allinea il calendario;
+non cambia le assegnazioni già presenti.
+
+`pt_trainer_wallet_entries` è un registro a sola aggiunta: `earning` e `adjustment`
+contabilizzano il debito, `payment` lo riduce, `payment_reversal` annulla un
+pagamento. Date, ora, spazio e autore sono conservati nei movimenti; rimuovere
+uno slot non elimina il compenso storico già registrato. Il saldo è la somma
+degli importi, in centesimi. Il cron esistente riconcilia anche questi conti ogni
+5 minuti senza limite temporale per il recupero dei compensi arretrati; le letture
+admin dei conti aggiornano prima i compensi maturati. Il frontend aggiorna ogni minuto.
+
+Tabelle aggiuntive, tutte con RLS di lettura riservata agli admin:
+
+| Tabella | Scopo |
+|---|---|
+| `pt_trainer_rates(trainer_id, fee_cents)` | Compenso predefinito dell'account |
+| `pt_trainer_settings(id, default_trainer_id)` | Trainer per le nuove sedute programmate |
+| `pt_session_trainers(slot_id, trainer_id, fee_cents)` | Assegnazione e compenso della seduta |
+| `pt_trainer_wallet_entries` | Compensi, rettifiche, pagamenti e storni |
+
+RPC riservate agli admin:
+
+- `pt_add_trainer(email, fee_cents) → uuid`: crea account e compenso insieme.
+- `pt_save_trainer_rate(trainer_id, fee_cents) → void`.
+- `pt_set_trainer_defaults(trainer_id) → void`.
+- `pt_create_assigned_session(slot_id, trainer_id, fee_cents) → void`.
+- `pt_set_session_trainer(slot_id, trainer_id, fee_cents, reason) → void`.
+- `pt_record_trainer_payment(trainer_id, amount_cents, paid_on, payment_method, note, request_id) → uuid`.
+- `pt_reverse_trainer_payment(entry_id, reason) → void`.
+- `pt_trainer_accounts() → table(trainer_id, email, default_fee_cents, earned_cents, paid_cents, balance_cents)`.
+- `pt_trainer_session_details(from_date, to_date) → table(slot_id, trainer_id, trainer_email, fee_cents, earned_cents)`.
+
+### API partecipanti e sedute
 
 Tabelle (lettura via PostgREST con RLS; scritture solo tramite RPC salvo dove indicato):
 

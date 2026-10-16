@@ -16,7 +16,7 @@ import { ptErrorMessage, useRestoreSession, type AdminSession } from '@/hooks/us
 import { fmtTime } from '@/components/admin/ptFormat'
 import { sessionLabel, updatedMessage } from './sessionUtils'
 
-export type SessionAction = 'void' | 'exclude' | 'payers'
+export type SessionAction = 'void' | 'exclude' | 'payers' | 'trainer'
 
 interface SessionRowProps {
   session: AdminSession
@@ -92,6 +92,15 @@ export function SessionRow({ session, onAction }: SessionRowProps) {
             <p className="text-xs text-muted-foreground">Motivo: {session.voided_reason}</p>
           )}
 
+          {session.trainer ? (
+            <div className="text-xs text-muted-foreground">
+              <p className="break-all">Trainer: {session.trainer.trainer_email}</p>
+              <p>Compenso: {formatEUR(session.trainer.fee_cents)} · Maturato: {formatEUR(session.trainer.earned_cents)}</p>
+            </div>
+          ) : (
+            <button type="button" onClick={() => onAction('trainer', session)} className="text-xs font-medium text-amber-700 underline dark:text-amber-300">Trainer da assegnare</button>
+          )}
+
           {session.participants.length === 0 ? (
             <p className="text-xs text-muted-foreground">Nessun prenotato</p>
           ) : (
@@ -134,7 +143,7 @@ export function SessionRow({ session, onAction }: SessionRowProps) {
 
         <div className="flex shrink-0 items-start gap-1">
           {!voided && (
-            <span className="pt-1 text-sm font-medium tabular-nums">{formatEUR(session.total_cents)}</span>
+            <div className="pt-1 text-right"><p className="text-[10px] text-muted-foreground">Partecipanti</p><span className="text-sm font-medium tabular-nums">{formatEUR(session.total_cents)}</span></div>
           )}
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -144,6 +153,10 @@ export function SessionRow({ session, onAction }: SessionRowProps) {
               <MoreHorizontal />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onClick={() => onAction('trainer', session)}>
+                <HandCoins /> Trainer e compenso…
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               {voided ? (
                 <DropdownMenuItem onClick={handleRestore}>
                   <RotateCcw /> Ripristina seduta

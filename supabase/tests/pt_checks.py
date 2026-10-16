@@ -34,7 +34,9 @@ class PersonalTrainerChecks(unittest.TestCase):
                  max_participants = 4, full_session_min = 3;
                INSERT INTO public.allowed_domains(domain) VALUES ('humans.tech');
                INSERT INTO public.admins(email) VALUES ('admin@humans.tech');
-               INSERT INTO public.pt_trainers(email) VALUES ('coach@trainers.example');""")
+               INSERT INTO public.pt_trainers(email) VALUES ('coach@trainers.example');
+               INSERT INTO public.pt_trainer_rates(trainer_id,fee_cents) SELECT id,4000 FROM public.pt_trainers;
+               INSERT INTO public.pt_trainer_settings(id,default_trainer_id) SELECT true,id FROM public.pt_trainers;""")
         # Sorted ids so remainder cents go to m[0], m[1], ... deterministically.
         ids = sorted(str(uuid.uuid4()) for _ in range(8))
         self.m = [(ids[i], f'member{i}@humans.tech') for i in range(8)]

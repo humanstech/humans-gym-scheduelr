@@ -279,6 +279,34 @@ export type Database = {
         }
         Relationships: []
       }
+      pt_trainer_settings: {
+        Row: { id: boolean; default_trainer_id: string | null }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      pt_trainer_wallet_entries: {
+        Row: {
+          id: string
+          trainer_id: string
+          amount_cents: number
+          kind: 'earning' | 'adjustment' | 'payment' | 'payment_reversal'
+          slot_id: string | null
+          session_date: string | null
+          session_start: string | null
+          space_name: string | null
+          occurred_on: string
+          payment_method: 'bank_transfer' | 'cash' | 'other' | null
+          description: string
+          request_id: string | null
+          reverses_entry_id: string | null
+          created_at: string
+          created_by_name: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       pt_wallet_entries: {
         Row: {
           amount_cents: number
@@ -508,6 +536,24 @@ export type Database = {
         }[]
       }
       admin_promote_user: { Args: { user_id: string }; Returns: undefined }
+      pt_add_trainer: { Args: { email: string; fee_cents: number }; Returns: string }
+      pt_save_trainer_rate: { Args: { trainer_id: string; fee_cents: number }; Returns: undefined }
+      pt_set_trainer_defaults: { Args: { trainer_id: string }; Returns: undefined }
+      pt_set_session_trainer: { Args: { slot_id: string; trainer_id: string; fee_cents: number; reason: string }; Returns: undefined }
+      pt_create_assigned_session: { Args: { slot_id: string; trainer_id: string; fee_cents: number }; Returns: undefined }
+      pt_record_trainer_payment: {
+        Args: { trainer_id: string; amount_cents: number; paid_on: string; payment_method: string; note: string; request_id: string }
+        Returns: string
+      }
+      pt_reverse_trainer_payment: { Args: { entry_id: string; reason: string }; Returns: undefined }
+      pt_trainer_accounts: {
+        Args: never
+        Returns: { trainer_id: string; email: string; default_fee_cents: number | null; earned_cents: number; paid_cents: number; balance_cents: number }[]
+      }
+      pt_trainer_session_details: {
+        Args: { from_date: string; to_date: string }
+        Returns: { slot_id: string; trainer_id: string; trainer_email: string; fee_cents: number; earned_cents: number }[]
+      }
       admin_list_users: {
         Args: never
         Returns: {
