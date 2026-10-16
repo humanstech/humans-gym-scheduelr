@@ -8,7 +8,7 @@ test.describe('Anonymous access', () => {
     expect(response.status()).toBe(200)
     expect(await response.text()).toBe('ok')
   })
-  for (const route of ['/', '/admin', '/my-bookings']) {
+  for (const route of ['/', '/admin', '/my-bookings', '/trainer-wallet']) {
     test(`${route} requires login`, async ({ page }) => {
       await page.goto(route)
       await expect(page).toHaveURL(/\/login$/)

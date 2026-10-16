@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useNow, usePtStatus, useTrainerSessions, type PtTrainerSession } from '@/hooks/usePersonalTrainer'
 import { cn } from '@/lib/utils'
+import { MyTrainerWallet } from '@/components/pt/MyTrainerWallet'
 
 type Range = 'upcoming' | 'past'
 
@@ -103,6 +104,7 @@ export function TrainerHome() {
 
   return (
     <div className="space-y-6">
+      <MyTrainerWallet compact />
       <div>
         <h1 className="text-2xl font-bold">Le tue sedute</h1>
         <p className="mt-1 text-muted-foreground">Sedute di personal training e chi si è iscritto</p>

@@ -20,7 +20,7 @@ export function useIsTrainer() {
 
 /**
  * A trainer who is not an admin uses the app in trainer-only mode:
- * they only see their PT sessions.
+ * they see their PT sessions and personal compensation wallet.
  */
 export function useTrainerMode() {
   const { user, loading: authLoading } = useAuth()

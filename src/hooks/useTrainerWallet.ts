@@ -1,11 +1,29 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import type { Database, Tables } from '@/lib/database.types'
+import { useAuth } from './useAuth'
+import { useIsTrainer } from './useRoles'
 
 type Fns = Database['public']['Functions']
 export type TrainerAccount = Fns['pt_trainer_accounts']['Returns'][number]
 export type TrainerSessionDetails = Fns['pt_trainer_session_details']['Returns'][number]
 export type TrainerWalletEntry = Tables<'pt_trainer_wallet_entries'>
+
+export function useMyTrainerWallet() {
+  const { user } = useAuth()
+  const { data: isTrainer } = useIsTrainer()
+  return useQuery({
+    queryKey: ['pt', 'my-trainer-wallet', user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('pt_my_trainer_wallet')
+      if (error) throw error
+      return data
+    },
+    enabled: !!user && isTrainer === true,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+  })
+}
 
 export function useTrainerAccounts() {
   return useQuery({

@@ -2,6 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 import unittest
 import uuid
+import json
 import pt_checks
 from pt_checks import sql, value
 
@@ -124,6 +125,50 @@ class TrainerWalletChecks(unittest.TestCase):
             self.assertNotEqual(sql('DELETE FROM public.pt_trainer_wallet_entries', user, False).returncode, 0)
             self.assertNotEqual(sql('UPDATE public.pt_trainer_wallet_entries SET amount_cents=1', user, False).returncode, 0)
             self.assertNotEqual(sql(f"INSERT INTO public.pt_trainer_wallet_entries(trainer_id,amount_cents,kind,occurred_on,description) VALUES ('{trainer}',1,'earning',current_date,'fake')", user, False).returncode, 0)
+
+    def test_own_wallet_is_private_and_requires_a_trainer(self):
+        self.slot('current_date-3', '10:00')
+        other = value("SELECT public.pt_add_trainer('other@example.org', 5500)", self.admin)
+        slot = self.slot('current_date-3', '13:00')
+        self.assign(slot, other, 5500)
+        own = json.loads(value('SELECT public.pt_my_trainer_wallet()', self.trainer))
+        self.assertEqual(own['earned_cents'], 4000)
+        self.assertEqual(own['paid_cents'], 0)
+        self.assertEqual(own['balance_cents'], 4000)
+        self.assertTrue(all(e['trainer_id'] == self.trainer_id() for e in own['entries']))
+        # Even admins must have a trainer account to use this personal endpoint.
+        for user in [self.m[0], self.guest, self.admin]:
+            denied = sql('SELECT public.pt_my_trainer_wallet()', user, False)
+            self.assertNotEqual(denied.returncode, 0)
+            self.assertIn('Trainer required', denied.stderr)
+        self.assertNotEqual(sql('SET ROLE anon; SELECT public.pt_my_trainer_wallet()', ok=False).returncode, 0)
+        self.assertNotEqual(sql(f"SELECT public.pt_my_trainer_wallet('{other}')", self.trainer, False).returncode, 0)
+        # Having both roles never exposes other trainers through the personal RPC.
+        sql(f"INSERT INTO public.admins(email) VALUES ('{self.trainer[1]}')")
+        self.assertEqual(json.loads(value('SELECT public.pt_my_trainer_wallet()', self.trainer)), own)
+
+    def test_own_wallet_accrues_on_read_and_matches_admin_after_reversals(self):
+        future = self.slot('current_date+3', '10:00')
+        sql('ALTER TABLE public.slots DISABLE TRIGGER pt_trainer_slot_changed')
+        sql(f"UPDATE public.slots SET date=current_date-3 WHERE id='{future}'")
+        sql('ALTER TABLE public.slots ENABLE TRIGGER pt_trainer_slot_changed')
+        self.assertEqual(self.balance(), 0)
+        payment = value(f"SELECT public.pt_record_trainer_payment('{self.trainer_id()}',6000,current_date-1,'cash','advance','{uuid.uuid4()}')", self.admin)
+        # Posting a payment does not run the accrual job.
+        first = json.loads(value('SELECT public.pt_my_trainer_wallet()', self.trainer))
+        self.assertEqual((first['earned_cents'], first['paid_cents'], first['balance_cents']), (4000, 6000, -2000))
+        self.assertEqual(json.loads(value('SELECT public.pt_my_trainer_wallet()', self.trainer)), first)
+        sql(f"SELECT public.pt_reverse_trainer_payment('{payment}','wrong payment')", self.admin)
+        sql(f"SELECT public.pt_void_session('{future}','cancelled')", self.admin)
+        own = json.loads(value('SELECT public.pt_my_trainer_wallet()', self.trainer))
+        self.assertEqual((own['earned_cents'], own['paid_cents'], own['balance_cents']), (0, 0, 0))
+        self.assertEqual(len(own['entries']), 4)
+        self.assertEqual(value('SELECT earned_cents,paid_cents,balance_cents FROM public.pt_trainer_accounts()', self.admin), '0|0|0')
+
+    def test_own_wallet_empty_and_future_sessions_have_zero_totals(self):
+        self.slot('current_date+3', '10:00')
+        own = json.loads(value('SELECT public.pt_my_trainer_wallet()', self.trainer))
+        self.assertEqual(own, {'earned_cents': 0, 'paid_cents': 0, 'balance_cents': 0, 'entries': []})
 
     def test_legacy_history_requires_explicit_assignment(self):
         sql('ALTER TABLE public.pt_sessions DISABLE TRIGGER pt_session_trainer_created')

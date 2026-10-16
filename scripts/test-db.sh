@@ -14,7 +14,7 @@ done
 if ! $ready; then echo 'PostgreSQL test container did not become ready' >&2; exit 1; fi
 docker exec -i "$test_container" psql -X -U postgres -v ON_ERROR_STOP=1 < supabase/tests/bootstrap.sql >/dev/null
 # pg_cron schedule files (0002, 0003, 0005) need the extension and are skipped here.
-for migration in supabase/migrations/202610150001_initial.sql supabase/migrations/202610150004_personal_trainer.sql supabase/migrations/202610150006_admin_promote_user.sql supabase/migrations/202610160001_trainer_wallets.sql; do
+for migration in supabase/migrations/202610150001_initial.sql supabase/migrations/202610150004_personal_trainer.sql supabase/migrations/202610150006_admin_promote_user.sql supabase/migrations/202610160001_trainer_wallets.sql supabase/migrations/202610160002_trainer_own_wallet.sql; do
   docker exec -i "$test_container" psql -X -U postgres -v ON_ERROR_STOP=1 -1 < "$migration" >/dev/null
 done
 GYM_TEST_CONTAINER="$test_container" python3 supabase/tests/checks.py

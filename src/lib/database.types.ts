@@ -550,6 +550,15 @@ export type Database = {
         Args: never
         Returns: { trainer_id: string; email: string; default_fee_cents: number | null; earned_cents: number; paid_cents: number; balance_cents: number }[]
       }
+      pt_my_trainer_wallet: {
+        Args: never
+        Returns: {
+          earned_cents: number
+          paid_cents: number
+          balance_cents: number
+          entries: Database['public']['Tables']['pt_trainer_wallet_entries']['Row'][]
+        }
+      }
       pt_trainer_session_details: {
         Args: { from_date: string; to_date: string }
         Returns: { slot_id: string; trainer_id: string; trainer_email: string; fee_cents: number; earned_cents: number }[]
